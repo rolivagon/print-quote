@@ -1,0 +1,4 @@
+# Production Auth contract. Apply these values in the production Supabase
+# project as part of deployment; local/test deliberately use config.toml.
+[auth.email]
+enable_confirmations = true

@@ -1,0 +1,62 @@
+serviceAccount: projects/rodxdev-prod/serviceAccounts/print-quote-deployer@rodxdev-prod.iam.gserviceaccount.com
+
+substitutions:
+  _REGION: us-central1
+  _REPOSITORY: print-quote
+  _RUNTIME_SERVICE_ACCOUNT: print-quote-runtime
+  _VITE_SUPABASE_URL: https://replace-me.supabase.co
+  _VITE_SUPABASE_PUBLISHABLE_KEY: replace-me
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    id: build-image
+    args:
+      - build
+      - --build-arg=VITE_SUPABASE_URL=${_VITE_SUPABASE_URL}
+      - --build-arg=VITE_SUPABASE_PUBLISHABLE_KEY=${_VITE_SUPABASE_PUBLISHABLE_KEY}
+      - --tag=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/print-quote:$BUILD_ID
+      - .
+
+  - name: gcr.io/cloud-builders/docker
+    id: push-image
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/print-quote:$BUILD_ID
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: deploy-cloud-run
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - --project=rodxdev-prod
+      - print-quote
+      - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/print-quote:$BUILD_ID
+      - --region=${_REGION}
+      - --platform=managed
+      - --allow-unauthenticated
+      - --service-account=${_RUNTIME_SERVICE_ACCOUNT}@$PROJECT_ID.iam.gserviceaccount.com
+      - --set-secrets=DATABASE_URL=print-quote-database-url:latest,SUPABASE_URL=print-quote-supabase-url:latest,SUPABASE_SERVICE_ROLE_KEY=print-quote-supabase-service-role-key:latest
+      - --port=8080
+      - --cpu=1
+      - --memory=512Mi
+      - --min-instances=0
+      - --max-instances=2
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: report-deployment
+    entrypoint: gcloud
+    args:
+      - run
+      - services
+      - describe
+      - print-quote
+      - --project=rodxdev-prod
+      - --region=${_REGION}
+      - --format=value(status.url,status.latestReadyRevisionName,spec.template.spec.containers[0].image)
+
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/print-quote:$BUILD_ID

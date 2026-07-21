@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "print-quote"
+version = "0.1.0"
+description = "A Python project for print quote calculations"
+authors = [{name = "Author", email = "author@example.com"}]
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2",
+    "email-validator>=2",
+    "sqlmodel>=0.0.14",
+    "psycopg2-binary>=2.9.9",
+    "fastapi>=0.100.0",
+    "uvicorn>=0.23.0",
+    "python-jose[cryptography]>=3.3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "ruff",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "C4", # flake8-comprehensions
+    "UP", # pyupgrade
+]
+ignore = [
+    "B008", # FastAPI's Depends and Query declarations are designed as parameter defaults.
+    "B904", # Existing API error translations intentionally preserve their HTTP exception context.
+    "E501", # Long domain examples and assertions are more readable unwrapped.
+]
+
+[tool.ruff.lint.per-file-ignores]
+"src/quote/repo/sql_repo.py" = ["E711", "E712"]
+"src/quote/repo/interfaces.py" = ["F821"]
+"tests/**" = ["E402", "F841"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

@@ -1,0 +1,743 @@
+{
+  "info": {
+    "_postman_id": "8f8e8e8e-8e8e-8e8e-8e8e-8e8e8e8e8e8e",
+    "name": "Print Quote API",
+    "description": "API for print quote calculations and management",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.access_token) {",
+                  "    pm.collectionVariables.set(\"token\", jsonData.access_token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "username",
+                  "value": "admin@example.com",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "admin123",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Get Me",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/users/me",
+              "host": ["{{base_url}}"],
+              "path": ["users", "me"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/users/",
+              "host": ["{{base_url}}"],
+              "path": ["users", ""]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create User",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"New User\",\n    \"email\": \"new@example.com\",\n    \"password\": \"password123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/users/",
+              "host": ["{{base_url}}"],
+              "path": ["users", ""]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Clients",
+      "item": [
+        {
+          "name": "List Clients",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/clients/",
+              "host": ["{{base_url}}"],
+              "path": ["clients", ""]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Individual Client",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"tax_id\": \"12.345.678-9\",\n    \"client_type\": \"individual\",\n    \"first_name\": \"Juan\",\n    \"last_name\": \"Perez\",\n    \"email\": \"juan@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/clients/",
+              "host": ["{{base_url}}"],
+              "path": ["clients", ""]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Papers",
+      "item": [
+        {
+          "name": "List Papers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/papers/",
+              "host": ["{{base_url}}"],
+              "path": ["papers", ""]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Paper",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Couche 300g\",\n    \"weight\": 300,\n    \"description\": \"Papel couche de alto gramaje\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/papers/",
+              "host": ["{{base_url}}"],
+              "path": ["papers", ""]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Paper",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Couche 300g Actualizado\",\n    \"weight\": 310\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/papers/1",
+              "host": ["{{base_url}}"],
+              "path": ["papers", "1"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Paper",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/papers/1",
+              "host": ["{{base_url}}"],
+              "path": ["papers", "1"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Pricing",
+          "item": [
+            {
+              "name": "List Paper Pricing",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/papers/1/pricing",
+                  "host": ["{{base_url}}"],
+                  "path": ["papers", "1", "pricing"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Paper Pricing",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"print_type\": \"digital\",\n    \"min_quantity\": 1,\n    \"max_quantity\": 100,\n    \"unit_price\": \"715.00\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/papers/1/pricing",
+                  "host": ["{{base_url}}"],
+                  "path": ["papers", "1", "pricing"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update Paper Pricing",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"unit_price\": \"650.00\",\n    \"max_quantity\": 200\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/papers/pricing/1",
+                  "host": ["{{base_url}}"],
+                  "path": ["papers", "pricing", "1"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Paper Pricing",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/papers/pricing/1",
+                  "host": ["{{base_url}}"],
+                  "path": ["papers", "pricing", "1"]
+                }
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Finishes",
+      "item": [
+        {
+          "name": "List Finishes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/finishes/",
+              "host": ["{{base_url}}"],
+              "path": ["finishes", ""]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Finish",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Corte Recto\",\n    \"description\": \"Corte recto de bordes\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/finishes/",
+              "host": ["{{base_url}}"],
+              "path": ["finishes", ""]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Finish",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Corte Recto Actualizado\",\n    \"description\": \"Nueva descripción\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/finishes/1",
+              "host": ["{{base_url}}"],
+              "path": ["finishes", "1"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Finish",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/finishes/1",
+              "host": ["{{base_url}}"],
+              "path": ["finishes", "1"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Pricing",
+          "item": [
+            {
+              "name": "List Finish Pricing",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/finishes/1/pricing",
+                  "host": ["{{base_url}}"],
+                  "path": ["finishes", "1", "pricing"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Finish Pricing",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"print_type\": \"digital\",\n    \"unit\": \"job\",\n    \"min_quantity\": 1,\n    \"max_quantity\": 100,\n    \"unit_price\": \"3000.00\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/finishes/1/pricing",
+                  "host": ["{{base_url}}"],
+                  "path": ["finishes", "1", "pricing"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update Finish Pricing",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"unit\": \"per_item\",\n    \"unit_price\": \"3500.00\",\n    \"max_quantity\": 150\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/finishes/pricing/1",
+                  "host": ["{{base_url}}"],
+                  "path": ["finishes", "pricing", "1"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Finish Pricing",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/finishes/pricing/1",
+                  "host": ["{{base_url}}"],
+                  "path": ["finishes", "pricing", "1"]
+                }
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Quotes",
+      "item": [
+        {
+          "name": "DIGITAL - 500 Flyers (10x15cm)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"client_id\": 1,\n    \"items\": [\n        {\n            \"name\": \"Flyers Corporativos\",\n            \"description\": \"500 flyers para evento - Couche 170g\",\n            \"print_type\": \"digital\",\n            \"quantity\": 500,\n            \"width_cm\": 10,\n            \"height_cm\": 15,\n            \"paper_id\": 1,\n            \"color_mode\": \"4/0\",\n            \"sheet_config\": {\n                \"usable_width_cm\": 31,\n                \"usable_height_cm\": 46\n            },\n            \"finishes\": [1],\n            \"loss_percentage\": 0\n        }\n    ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/quotes/",
+              "host": ["{{base_url}}"],
+              "path": ["quotes", ""]
+            },
+            "description": "Caso: 500 flyers 10x15cm en Couche 170g.\n\nResultado esperado (unit test):\n- pieces_per_sheet: 9\n- sheets_needed: 56 (ceil(500/9))\n- paper_unit_price: $880 (56 pliegos = rango 51-100)\n- material_cost: $49.280 (56 × $880)\n- finishing_cost: $5.000\n- subtotal: $54.280\n- total_con_IVA: $64.600"
+          },
+          "response": []
+        },
+        {
+          "name": "DIGITAL - 20 Diplomas (21.5x28cm)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"client_id\": 1,\n    \"items\": [\n        {\n            \"name\": \"Diplomas de Reconocimiento\",\n            \"description\": \"20 diplomas - Couche 170g\",\n            \"print_type\": \"digital\",\n            \"quantity\": 20,\n            \"width_cm\": 21.5,\n            \"height_cm\": 28,\n            \"paper_id\": 1,\n            \"color_mode\": \"4/0\",\n            \"sheet_config\": {\n                \"usable_width_cm\": 31,\n                \"usable_height_cm\": 46\n            },\n            \"finishes\": [],\n            \"loss_percentage\": 0\n        }\n    ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/quotes/",
+              "host": ["{{base_url}}"],
+              "path": ["quotes", ""]
+            },
+            "description": "Caso: 20 diplomas tamaño A4 en Couche 170g.\n\nResultado esperado (unit test):\n- pieces_per_sheet: 2 (con rotación 31/28×46/21.5)\n- sheets_needed: 10\n- material_cost: $17.600 (10 × $1.760 precio especial diploma)\n- sin terminaciones\n- subtotal: $17.600"
+          },
+          "response": []
+        },
+        {
+          "name": "DIGITAL - 300 Tarjetas (9x5.5cm) 4/4",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"client_id\": 1,\n    \"items\": [\n        {\n            \"name\": \"Tarjetas de Presentación\",\n            \"description\": \"300 tarjetas - Couche 300g - 4/4\",\n            \"print_type\": \"digital\",\n            \"quantity\": 300,\n            \"width_cm\": 9,\n            \"height_cm\": 5.5,\n            \"paper_id\": 1,\n            \"color_mode\": \"4/4\",\n            \"sheet_config\": {\n                \"usable_width_cm\": 31,\n                \"usable_height_cm\": 46\n            },\n            \"finishes\": [1],\n            \"loss_percentage\": 0\n        }\n    ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/quotes/",
+              "host": ["{{base_url}}"],
+              "path": ["quotes", ""]
+            },
+            "description": "Caso: 300 tarjetas 9x5.5cm - Color ambos lados (4/4).\n\nResultado esperado (unit test):\n- pieces_per_sheet: 21\n- sheets_needed: 15 (ceil(300/21))\n- material_cost: $31.350 (15 × $2.090)\n- finishing_cost: $3.000\n- subtotal: $34.350"
+          },
+          "response": []
+        },
+        {
+          "name": "PLOTTER - Afiche 70x50cm",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"client_id\": 1,\n    \"items\": [\n        {\n            \"name\": \"Afiche Publicitario\",\n            \"description\": \"Afiche 70x50cm - Papel Sintético\",\n            \"print_type\": \"plotter\",\n            \"quantity\": 1,\n            \"width_cm\": 70,\n            \"height_cm\": 50,\n            \"paper_id\": 2,\n            \"color_mode\": \"4/0\",\n            \"sheet_config\": {\n                \"usable_width_cm\": 70,\n                \"usable_height_cm\": 50\n            },\n            \"finishes\": [2],\n            \"loss_percentage\": 0\n        }\n    ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/quotes/",
+              "host": ["{{base_url}}"],
+              "path": ["quotes", ""]
+            },
+            "description": "Caso: Afiche 70×50cm en papel sintético.\n\nResultado esperado (unit test):\n- m2: 0.35 (0.70m × 0.50m)\n- material_cost: $2.975 (0.35m² × $8.500/m²)\n- finishing_cost: $1.000 (corte)\n- subtotal: $3.975"
+          },
+          "response": []
+        },
+        {
+          "name": "OFFSET - 5000 Flyers 55x41.6cm",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"client_id\": 1,\n    \"items\": [\n        {\n            \"name\": \"Flyers Promocionales\",\n            \"description\": \"5000 flyers offset - Couche 300g - 4/0\",\n            \"print_type\": \"offset\",\n            \"quantity\": 5000,\n            \"width_cm\": 55,\n            \"height_cm\": 41.6,\n            \"paper_id\": 1,\n            \"color_mode\": \"4/0\",\n            \"sheet_config\": {\n                \"usable_width_cm\": 55,\n                \"usable_height_cm\": 41.6\n            },\n            \"finishes\": [3],\n            \"loss_percentage\": 0\n        }\n    ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/quotes/",
+              "host": ["{{base_url}}"],
+              "path": ["quotes", ""]
+            },
+            "description": "Caso: 5000 flyers offset grandes en Couche 300g.\n\nResultado esperado (unit test):\n- pieces_per_sheet: 1 (una pieza por pliego)\n- total_sheets: 5000\n- merma: 300 hojas\n- plates_cost: $28.000 (4 colores × $7.000)\n- run_cost: $170.000\n- finishing_cost: $60.000 (troquel)\n- molde_troquel: $20.000\n- paper_cost: ~$800.000 (aprox 6 resmas)\n- subtotal_antes_markup: ~$1.078.000\n- markup 70%: ~$754.600\n- total_con_IVA: ~$2.180.800"
+          },
+          "response": []
+        },
+        {
+          "name": "OFFSET - 16.000 Flyers (16 diseños)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"client_id\": 1,\n    \"items\": [\n        {\n            \"name\": \"Flyers Múltiples Diseños\",\n            \"description\": \"16.000 flyers (16 diseños x 1000) - Couche 170g - 4/4\",\n            \"print_type\": \"offset\",\n            \"quantity\": 16000,\n            \"width_cm\": 14,\n            \"height_cm\": 21.5,\n            \"paper_id\": 1,\n            \"color_mode\": \"4/4\",\n            \"sheet_config\": {\n                \"usable_width_cm\": 60,\n                \"usable_height_cm\": 46\n            },\n            \"num_designs\": 16,\n            \"merma_per_design\": 300,\n            \"finishes\": [1],\n            \"loss_percentage\": 0\n        }\n    ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/quotes/",
+              "host": ["{{base_url}}"],
+              "path": ["quotes", ""]
+            },
+            "description": "Caso: 16.000 flyers offset con 16 diseños diferentes en Couche 170g.\n\nResultado esperado (unit test):\n- pieces_per_sheet: 8 (4×2)\n- total_sheets_with_merma: 2600 (2000 prod + 600 merma)\n- plates_cost: $112.000 (8 colores × $7.000 × 2 tirajes)\n- paper_cost: $200.635 (6 resmas a $33.439 cada una)\n- run_cost: $140.000 (2 tirajes × $70.000)\n- corte_cost: $10.000\n- subtotal: $462.635\n- markup 60%: $277.581\n- total: $740.216"
+          },
+          "response": []
+        },
+        {
+          "name": "List Quotes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/quotes/?status=draft&skip=0&limit=50",
+              "host": ["{{base_url}}"],
+              "path": ["quotes", ""],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "draft"
+                },
+                {
+                  "key": "skip",
+                  "value": "0"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Lista todas las cotizaciones. Filtros opcionales:\n- status: draft, sent, approved, rejected\n- client_id: filtrar por cliente\n- skip/limit: paginación"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Quote",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/quotes/1",
+              "host": ["{{base_url}}"],
+              "path": ["quotes", "1"]
+            },
+            "description": "Obtiene el detalle completo de una cotización específica incluyendo todos sus ítems."
+          },
+          "response": []
+        },
+        {
+          "name": "Send Quote",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"status\": \"sent\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/quotes/1/status",
+              "host": ["{{base_url}}"],
+              "path": ["quotes", "1", "status"]
+            },
+            "description": "Cambia el estado de una cotización a 'sent' (enviada al cliente).\n\nSolo permitido desde estado DRAFT."
+          },
+          "response": []
+        },
+        {
+          "name": "Approve Quote",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"status\": \"approved\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/quotes/1/status",
+              "host": ["{{base_url}}"],
+              "path": ["quotes", "1", "status"]
+            },
+            "description": "Cambia el estado de una cotización a 'approved' (aprobada por el cliente).\n\nSolo permitido desde estado SENT."
+          },
+          "response": []
+        },
+        {
+          "name": "Reject Quote",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"status\": \"rejected\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/quotes/1/status",
+              "host": ["{{base_url}}"],
+              "path": ["quotes", "1", "status"]
+            },
+            "description": "Cambia el estado de una cotización a 'rejected' (rechazada por el cliente).\n\nSolo permitido desde estado SENT."
+          },
+          "response": []
+        }
+      ],
+      "description": "API de Cotizaciones - Crea cotizaciones calculando automáticamente precios para Digital, Plotter y Offset.\n\nEJEMPLOS POR TIPO DE IMPRESIÓN:\n\n🖨️ DIGITAL (bajo volumen, rápido):\n- 500 flyers (10×15cm) → $64.600\n- 20 diplomas (A4) → ~$21.000\n- 300 tarjetas (9×5.5cm) 4/4 → ~$41.000\n\n🖨️ PLOTTER (grandes formatos):\n- Afiche 70×50cm → ~$4.700\n- Banner 300×100cm → ~$30.000\n\n🖨️ OFFSET (alto volumen, económico):\n- 5000 flyers grandes → ~$2.180.800\n- 16.000 flyers múltiples diseños → ~$740.000\n\nFlujo típico:\n1. POST /quotes/ - Crear cotización (backend calcula todo automáticamente)\n2. PATCH /quotes/{id}/status - Cambiar estado (sent → approved/rejected)\n\nEl backend calcula automáticamente:\n- pieces_per_sheet, sheets_needed\n- material_cost, finishing_cost\n- markup (por tipo), IVA 19%, total_final\n\nNota: Los precios de papel se calculan por RANGO DE PLIEGOS, no por cantidad de unidades. Ej: 500 flyers = 56 pliegos → precio rango 51-100."
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [""]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [""]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
