@@ -10,7 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from quote.domain.enums import PlotterBillingMetric, PrintType, Unit
+from quote.domain.enums import ColorMode, PlotterBillingMetric, PrintType, Unit
 from quote.repo.models import (
     Finish,
     FinishPricing,
@@ -568,7 +568,6 @@ class TestPlotterQuotesIntegration:
 class TestOffsetQuotesIntegration:
     """Offset quote API integration tests matching unit test cases."""
 
-    @pytest.mark.skip(reason="Offset API endpoint not yet implemented")
     def test_offset_5000_units_matches_unit_test(
         self,
         authorized_client: TestClient,
@@ -576,5 +575,43 @@ class TestOffsetQuotesIntegration:
         offset_5000_case: dict,
     ):
         """Test 5000 units offset API matches unit test calculations."""
-        # TODO: Implement when offset API endpoint is ready
-        pass
+        db_session, seed_data = api_seeded_db
+        case = offset_5000_case
+
+        db_session.add(
+            PaperPricing(
+                paper_id=seed_data["paper_couche"].id,
+                print_type=PrintType.OFFSET,
+                color_mode=ColorMode.C4_0,
+                min_quantity=1,
+                max_quantity=None,
+                unit_price=Decimal("150"),
+            )
+        )
+        db_session.commit()
+
+        response = authorized_client.post(
+            "/api/quotes/",
+            json={
+                "client_id": seed_data["client_company"].id,
+                "items": [
+                    {
+                        "name": "Offset 5000 Units Test",
+                        "print_type": "offset",
+                        "color_mode": case["color"],
+                        "quantity": case["cantidad"],
+                        "width_cm": case["width_cm"],
+                        "height_cm": case["height_cm"],
+                        "paper_id": seed_data["paper_couche"].id,
+                        "sheet_config": {
+                            "usable_width_cm": 70,
+                            "usable_height_cm": 50,
+                        },
+                    }
+                ],
+            },
+        )
+        assert response.status_code == 201, response.text
+        data = response.json()
+        assert data["items"][0]["print_type"] == "offset"
+        assert data["items"][0]["quantity"] == case["cantidad"]
