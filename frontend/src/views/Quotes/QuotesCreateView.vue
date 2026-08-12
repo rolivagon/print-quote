@@ -200,7 +200,7 @@
                     </option>
                   </select>
                 </div>
-                <div>
+                <div v-if="item.print_type !== 'plotter'">
                   <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-400">
                     Modo de color <span class="text-error-500">*</span>
                   </label>
@@ -284,12 +284,16 @@
                 <select
                   v-model="item.paper_id"
                   required
-                  :disabled="!item.color_mode"
+                  :disabled="item.print_type !== 'plotter' && !item.color_mode"
                   class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <option value="">
                     {{
-                      item.color_mode ? 'Selecciona un papel' : 'Primero selecciona modo de color'
+                      item.print_type === 'plotter'
+                         ? 'Selecciona un material'
+                         : item.color_mode
+                           ? 'Selecciona un papel'
+                           : 'Primero selecciona modo de color'
                     }}
                   </option>
                   <option
@@ -297,7 +301,7 @@
                     :key="paper.id"
                     :value="paper.id"
                   >
-                    {{ paper.name }} ({{ paper.weight }}g)
+                    {{ paper.name }}{{ item.print_type === 'plotter' ? '' : ` (${paper.weight}g)` }}
                   </option>
                 </select>
               </div>
@@ -471,6 +475,7 @@ const authStore = useAuthStore()
 const clients = ref<Client[]>([])
 const papers = ref<Paper[]>([])
 const finishes = ref<Finish[]>([])
+const plotterFinishes = ref<Finish[]>([])
 const paperPricings = ref<Record<number, string[]>>({})
 const finishPricings = ref<Record<number, string[]>>({})
 const filteredPapers = ref<Record<number, Paper[]>>({})
@@ -530,7 +535,26 @@ const removeItem = (index: number) => {
   formData.items.splice(index, 1)
 }
 
-const onPrintTypeChange = (index: number) => {
+const loadAvailablePapers = async (index: number) => {
+  const item = formData.items[index]
+  if (!item.print_type || (item.print_type !== 'plotter' && !item.color_mode)) {
+    filteredPapers.value[index] = []
+    return
+  }
+
+  try {
+    const colorMode = item.print_type === 'plotter' ? '' : `&color_mode=${item.color_mode}`
+    const response = await get<Paper[]>(
+      `/papers/?print_type=${item.print_type}${colorMode}`,
+    )
+    filteredPapers.value[index] = response || []
+  } catch (error) {
+    console.error('Error loading filtered papers:', error)
+    filteredPapers.value[index] = []
+  }
+}
+
+const onPrintTypeChange = async (index: number) => {
   const item = formData.items[index]
   const printType = item.print_type
 
@@ -555,6 +579,8 @@ const onPrintTypeChange = (index: number) => {
     delete item.num_designs
     delete item.merma_per_design
   }
+
+  await loadAvailablePapers(index)
 }
 
 const onColorModeChange = async (index: number) => {
@@ -563,18 +589,7 @@ const onColorModeChange = async (index: number) => {
   // Reset paper selection when color mode changes
   item.paper_id = 0
 
-  // Load filtered papers for this print type and color mode
-  if (item.print_type && item.color_mode) {
-    try {
-      const response = await get<Paper[]>(
-        `/papers/?print_type=${item.print_type}&color_mode=${item.color_mode}`,
-      )
-      filteredPapers.value[index] = response || []
-    } catch (error) {
-      console.error('Error loading filtered papers:', error)
-      filteredPapers.value[index] = []
-    }
-  }
+  await loadAvailablePapers(index)
 }
 
 const getAvailablePapers = (index: number) => {
@@ -583,6 +598,10 @@ const getAvailablePapers = (index: number) => {
 }
 
 const getAvailableFinishes = (printType: PrintType) => {
+  if (printType === 'plotter') {
+    return plotterFinishes.value
+  }
+
   return finishes.value.filter((finish) => {
     const pricings = finishPricings.value[finish.id] || []
     return pricings.includes(printType)
@@ -635,7 +654,19 @@ const submitQuote = async () => {
   successMessage.value = ''
 
   try {
-    const response = await post<{ id: number }>('/quotes/', formData)
+    const payload = {
+      ...formData,
+      items: formData.items.map((item) => ({
+        ...item,
+        ...(item.print_type === 'plotter'
+          ? {
+              color_mode: '4/0',
+              material_type: papers.value.find((paper) => paper.id === item.paper_id)?.name,
+            }
+          : {}),
+      })),
+    }
+    const response = await post<{ id: number }>('/quotes/', payload)
     successMessage.value = 'Cotización creada exitosamente'
 
     // Redirect to quote detail after a short delay
@@ -662,6 +693,10 @@ onMounted(async () => {
     // Load finishes
     const finishesResponse = await get<Finish[]>('/finishes/')
     finishes.value = finishesResponse || []
+
+    // Plotter finishes use the separate plotter pricing catalog.
+    const plotterFinishesResponse = await get<Finish[]>('/finishes/?print_type=plotter')
+    plotterFinishes.value = plotterFinishesResponse || []
 
     // Load pricing info
     await loadPricingInfo()

@@ -189,6 +189,8 @@ export interface QuoteItem {
   height?: number
   paper_id: number
   color_mode: ColorMode | ''
+  material_type?: string
+  minimum_m2?: number
   sheet_config?: SheetConfig
   finishes: number[]
   loss_percentage: number
@@ -212,6 +214,7 @@ export interface QuoteItemResponse extends QuoteItem {
   paper_cost: string
   subtotal_before_losses: string
   subtotal_with_losses: string
+  net_before_iva: string
   iva_amount: string
   total_final: string
   created_at: string

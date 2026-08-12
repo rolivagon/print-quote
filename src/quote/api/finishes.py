@@ -14,6 +14,7 @@ from quote.api.schemas import (
     FinishPricingUpdate,
     FinishUpdate,
 )
+from quote.domain.enums import PrintType
 from quote.repo.models import User as UserModel
 from quote.repo.sql_repo import SQLFinishRepository
 
@@ -39,9 +40,12 @@ def list_finishes(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[UserModel, Depends(get_current_user)],
     include_deleted: bool = False,
+    print_type: PrintType | None = None,
 ):
-    """List all finishes."""
+    """List finishes, optionally restricted to a printing catalog."""
     finish_repo = SQLFinishRepository(db)
+    if print_type == PrintType.PLOTTER:
+        return finish_repo.get_plotter_finishes()
     return finish_repo.list_all(include_deleted=include_deleted)
 
 

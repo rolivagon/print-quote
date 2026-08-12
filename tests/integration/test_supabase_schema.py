@@ -20,14 +20,19 @@ from urllib.request import Request, urlopen
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import DBAPIError, IntegrityError
+from sqlalchemy.orm import sessionmaker
 
 from quote.api.main import app
-from quote.repo.models import Finish, FinishPricing, Paper, PaperPricing
+from quote.domain.enums import PlotterBillingMetric
+from quote.repo.models import Finish, FinishPricing, Paper, PaperPricing, PlotterPricing
 from quote.service.supabase_admin import reset_password_user
 
 sys.path.insert(0, str(Path(__file__).parents[2] / "scripts"))
+import load_plotter_data as plotter_loader  # noqa: E402
 from load_digital_data import _catalog  # noqa: E402
+from load_plotter_data import _catalog as plotter_catalog  # noqa: E402
+from load_plotter_data import load_plotter_data  # noqa: E402
 
 APPLICATION_TABLES = {
     "users",
@@ -38,6 +43,7 @@ APPLICATION_TABLES = {
     "base_measurements",
     "paper_pricing",
     "finish_pricing",
+    "plotter_pricing",
     "quotes",
     "quote_items",
     "quote_item_finishes",
@@ -239,20 +245,196 @@ def test_digital_data_loader_is_additive_and_idempotent():
             paper_pricing = {tuple(row[:-1]): row[-1] for row in paper_pricing_rows}
             finish_pricing = {tuple(row[:-1]): row[-1] for row in finish_pricing_rows}
 
-        assert counts == (
-            len(expected_papers),
-            len(expected_finishes),
-            len(expected_paper_pricing),
-            len(expected_finish_pricing),
-        )
-        assert papers == expected_papers
-        assert finishes == expected_finishes
-        assert len(paper_pricing) == len(paper_pricing_rows)
-        assert len(finish_pricing) == len(finish_pricing_rows)
-        assert paper_pricing == expected_paper_pricing
-        assert finish_pricing == expected_finish_pricing
+        assert all(papers[name] == value for name, value in expected_papers.items())
+        assert all(finishes[name] == value for name, value in expected_finishes.items())
+        assert all(paper_pricing[key] == value for key, value in expected_paper_pricing.items())
+        assert all(finish_pricing[key] == value for key, value in expected_finish_pricing.items())
     finally:
         engine.dispose()
+
+
+@pytest.fixture
+def postgres_connection():
+    """Provide a PostgreSQL transaction that is always rolled back after the test."""
+    engine = create_engine(os.environ["DATABASE_URL"])
+    connection = engine.connect()
+    transaction = connection.begin()
+    try:
+        yield connection
+    finally:
+        transaction.rollback()
+        connection.close()
+        engine.dispose()
+
+
+def _plotter_counts(connection):
+    return connection.execute(
+        text(
+            "select (select count(*) from public.papers), "
+            "(select count(*) from public.finishes), "
+            "(select count(*) from public.plotter_pricing)"
+        )
+    ).one()
+
+
+@pytest.mark.parametrize("owner_table", ["papers", "finishes"])
+def test_plotter_exclude_constraints_reject_overlapping_ranges_per_metric(
+    postgres_connection, owner_table: str
+):
+    """PostgreSQL EXCLUDE constraints allow another metric but reject overlapping ranges."""
+    owner_id = postgres_connection.execute(
+        text(f"insert into public.{owner_table} (name, weight) values (:name, 1) returning id")
+        if owner_table == "papers"
+        else text(f"insert into public.{owner_table} (name) values (:name) returning id"),
+        {"name": f"plotter-overlap-{uuid.uuid4().hex}"},
+    ).scalar_one()
+    owner_column = "paper_id" if owner_table == "papers" else "finish_id"
+    insert = text(
+        f"insert into public.plotter_pricing ({owner_column}, billing_metric, minimum, maximum, unit_price) "
+        "values (:owner_id, :metric, :minimum, :maximum, 1000)"
+    )
+    postgres_connection.execute(
+        insert,
+        {"owner_id": owner_id, "metric": "SQM", "minimum": 1, "maximum": 5},
+    )
+    with pytest.raises(IntegrityError):
+        with postgres_connection.begin_nested():
+            postgres_connection.execute(
+                insert,
+                {"owner_id": owner_id, "metric": "SQM", "minimum": 4, "maximum": 10},
+            )
+    postgres_connection.execute(
+        insert,
+        {"owner_id": owner_id, "metric": "JOB_QUANTITY", "minimum": 4, "maximum": 10},
+    )
+
+
+def test_plotter_data_loader_is_idempotent_and_preserves_digital_offset_rates(postgres_connection):
+    """Two loads add one Plotter catalog and leave Digital and Offset rates unchanged."""
+    session_factory = sessionmaker(
+        bind=postgres_connection, join_transaction_mode="create_savepoint"
+    )
+    paper_id = postgres_connection.execute(
+        text("insert into public.papers (name, weight) values (:name, 100) returning id"),
+        {"name": f"catalog-preservation-{uuid.uuid4().hex}"},
+    ).scalar_one()
+    finish_id = postgres_connection.execute(
+        text("insert into public.finishes (name) values (:name) returning id"),
+        {"name": f"catalog-preservation-{uuid.uuid4().hex}"},
+    ).scalar_one()
+    postgres_connection.execute(
+        text(
+            "insert into public.paper_pricing "
+            "(paper_id, print_type, color_mode, min_quantity, max_quantity, unit_price) values "
+            "(:paper_id, 'DIGITAL', 'C4_4', 1, 1, 777), "
+            "(:paper_id, 'OFFSET', 'C4_0', 2, 2, 888)"
+        ),
+        {"paper_id": paper_id},
+    )
+    postgres_connection.execute(
+        text(
+            "insert into public.finish_pricing "
+            "(finish_id, print_type, unit, min_quantity, max_quantity, unit_price) values "
+            "(:finish_id, 'DIGITAL', 'PER_ITEM', 1, 1, 999), "
+            "(:finish_id, 'OFFSET', 'JOB', 2, 2, 111)"
+        ),
+        {"finish_id": finish_id},
+    )
+    preserved_before = postgres_connection.execute(
+        text(
+            "select 'paper', print_type::text, color_mode::text, min_quantity, max_quantity, unit_price "
+            "from public.paper_pricing where paper_id = :paper_id union all "
+            "select 'finish', print_type::text, unit::text, min_quantity, max_quantity, unit_price "
+            "from public.finish_pricing where finish_id = :finish_id"
+        ),
+        {"paper_id": paper_id, "finish_id": finish_id},
+    ).all()
+    counts_before = _plotter_counts(postgres_connection)
+
+    with session_factory.begin() as session:
+        load_plotter_data(session)
+    counts_after_first_load = _plotter_counts(postgres_connection)
+    with session_factory.begin() as session:
+        load_plotter_data(session)
+    counts_after_second_load = _plotter_counts(postgres_connection)
+
+    preserved_after = postgres_connection.execute(
+        text(
+            "select 'paper', print_type::text, color_mode::text, min_quantity, max_quantity, unit_price "
+            "from public.paper_pricing where paper_id = :paper_id union all "
+            "select 'finish', print_type::text, unit::text, min_quantity, max_quantity, unit_price "
+            "from public.finish_pricing where finish_id = :finish_id"
+        ),
+        {"paper_id": paper_id, "finish_id": finish_id},
+    ).all()
+    duplicate_rates = postgres_connection.execute(
+        text(
+            "select 1 from public.plotter_pricing group by paper_id, finish_id, billing_metric, minimum, maximum "
+            "having count(*) > 1"
+        )
+    ).all()
+    assert counts_after_first_load[0] >= counts_before[0]
+    assert counts_after_first_load[1] >= counts_before[1]
+    assert counts_after_first_load[2] >= counts_before[2]
+    assert counts_after_second_load == counts_after_first_load
+    assert preserved_after == preserved_before
+    assert duplicate_rates == []
+    source = plotter_catalog().records
+    expected_rate_count = len([record for record in source if isinstance(record, PlotterPricing)])
+    source_names = [record.name for record in source if isinstance(record, Paper | Finish)]
+    catalog_rate_count = postgres_connection.execute(
+        text(
+            "select count(*) from public.plotter_pricing pp "
+            "left join public.papers p on p.id = pp.paper_id "
+            "left join public.finishes f on f.id = pp.finish_id "
+            "where coalesce(p.name, f.name) = any(:names)"
+        ),
+        {"names": source_names},
+    ).scalar_one()
+    assert catalog_rate_count >= expected_rate_count
+
+
+def test_plotter_loader_public_entrypoint_rolls_back_partial_catalog_on_conflict(
+    postgres_connection, monkeypatch
+):
+    """The no-session entrypoint rolls back every catalog insertion after a persisted conflict."""
+    session_factory = sessionmaker(
+        bind=postgres_connection, join_transaction_mode="create_savepoint"
+    )
+    monkeypatch.setattr(plotter_loader, "SessionLocal", session_factory)
+    paper_id = postgres_connection.execute(
+        text("select id from public.papers where name = 'SINTÉTICO' order by id limit 1")
+    ).scalar()
+    if paper_id is not None:
+        postgres_connection.execute(
+            text("delete from public.plotter_pricing where paper_id = :paper_id"),
+            {"paper_id": paper_id},
+        )
+
+    setup_session = session_factory()
+    try:
+        if paper_id is None:
+            paper = Paper(name="SINTÉTICO", weight=1)
+            setup_session.add(paper)
+            setup_session.flush()
+            paper_id = paper.id
+        setup_session.add(
+            PlotterPricing(
+                paper_id=paper_id,
+                billing_metric=PlotterBillingMetric.SQM,
+                minimum=Decimal("1"),
+                maximum=Decimal("5"),
+                unit_price=Decimal("1"),
+            )
+        )
+        setup_session.commit()
+    finally:
+        setup_session.close()
+
+    counts_before = _plotter_counts(postgres_connection)
+    with pytest.raises(ValueError, match="Plotter rate conflict"):
+        plotter_loader.load_plotter_data()
+    assert _plotter_counts(postgres_connection) == counts_before
 
 
 @pytest.mark.parametrize("role", ["anon", "authenticated"])

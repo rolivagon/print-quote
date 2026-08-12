@@ -1,6 +1,7 @@
 .PHONY: venv deps test cov fmt lint run all clean frontend-dev dev dev-bg dev-stop kill-ports \
         build-frontend serve tunnel tunnel-stop tunnel-quick supabase-start supabase-stop db-reset \
-        test-unit test-supabase bootstrap-admin bootstrap-admin-local migrate-legacy load-digital-data
+        test-unit test-supabase bootstrap-admin bootstrap-admin-local migrate-legacy load-digital-data load-plotter-data \
+        load-plotter-data-prod
 
 # Load local environment variables if .env.local exists
 -include .env.local
@@ -11,7 +12,7 @@ PORT ?= 8000
 API_PORT ?= 5001
 FRONTEND_PORT ?= 5173
 SUPABASE_TEST_TARGETS ?= tests/integration tests/test_api
-LOCAL_SUPABASE_FRONTEND_ENV = eval "$$(supabase status -o env)" && export VITE_SUPABASE_URL="$${VITE_SUPABASE_URL:-$$API_URL}" VITE_SUPABASE_PUBLISHABLE_KEY="$${VITE_SUPABASE_PUBLISHABLE_KEY:-$$ANON_KEY}"
+LOCAL_SUPABASE_FRONTEND_ENV = eval "$$(supabase status -o env)" && export VITE_SUPABASE_URL="$${VITE_SUPABASE_URL:-/supabase}" VITE_SUPABASE_PUBLISHABLE_KEY="$${VITE_SUPABASE_PUBLISHABLE_KEY:-$$ANON_KEY}"
 LOCAL_SUPABASE_BACKEND_ENV = configured_supabase_url="$${SUPABASE_URL:-}" && eval "$$(supabase status -o env)" && export SUPABASE_URL="$${configured_supabase_url:-$$API_URL}"
 
 # Create virtual environment
@@ -152,6 +153,14 @@ migrate-legacy:
 # Add missing canonical digital catalog data without changing existing production rows.
 load-digital-data:
 	.venv/bin/python scripts/load_digital_data.py
+
+# Add missing approved Plotter catalog data without changing existing rows.
+load-plotter-data:
+	.venv/bin/python scripts/load_plotter_data.py
+
+# Load Plotter data with explicitly loaded production settings overriding .env.local.
+load-plotter-data-prod:
+	@set -a && . ./.env.prod && set +a && $(MAKE) -e load-plotter-data
 
 # Build frontend for production
 build-frontend:

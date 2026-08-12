@@ -676,6 +676,7 @@ class QuoteItemResponse(EnumSchema):
     loss_percentage: float = Field(default=0, description="Loss percentage applied")
     subtotal_before_losses: str = Field(..., description="Subtotal before losses in CLP format")
     subtotal_with_losses: str = Field(..., description="Subtotal after losses in CLP format")
+    net_before_iva: str = Field(..., description="Net amount before IVA in CLP format")
     iva_amount: str = Field(..., description="IVA amount in CLP format")
     total_final: str = Field(..., description="Final total in CLP format")
 

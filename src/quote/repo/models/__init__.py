@@ -13,6 +13,7 @@ from quote.repo.models.finish_pricing import FinishPricing
 from quote.repo.models.fixed_product import FixedProduct, FixedProductQuantityRange
 from quote.repo.models.paper import Paper
 from quote.repo.models.paper_pricing import PaperPricing
+from quote.repo.models.plotter_pricing import PlotterPricing
 from quote.repo.models.quote import Quote, QuoteItem, QuoteItemFinish
 from quote.repo.models.user import User
 
@@ -27,6 +28,7 @@ __all__ = [
     # Masters
     "Paper",
     "PaperPricing",
+    "PlotterPricing",
     "Finish",
     "FinishPricing",
     "BaseMeasurement",

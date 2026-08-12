@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from decimal import Decimal
+from unicodedata import combining, normalize
 from uuid import UUID
 
 from sqlalchemy import or_, select
@@ -21,6 +22,7 @@ from quote.repo.models import (
     FinishPricing,
     Paper,
     PaperPricing,
+    PlotterPricing,
     User,
 )
 
@@ -97,6 +99,47 @@ class SQLMasterRepository:
         """Get all base measurements."""
         statement = select(BaseMeasurement)
         return list(self._session.execute(statement).scalars().all())
+
+    def get_plotter_rates_for_paper(self, paper_id: int) -> list[PlotterPricing]:
+        """Return every explicit Plotter rate for a substrate."""
+        return list(
+            self._session.execute(
+                select(PlotterPricing).where(PlotterPricing.paper_id == paper_id)
+            ).scalars()
+        )
+
+    def get_plotter_paper_by_name(self, name: str) -> Paper | None:
+        """Find a catalog substrate regardless of case or Unicode accents."""
+        normalized_name = "".join(
+            character for character in normalize("NFD", name.casefold()) if not combining(character)
+        )
+        papers = self._session.execute(
+            select(Paper)
+            .join(PlotterPricing, PlotterPricing.paper_id == Paper.id)
+            .distinct()
+            .order_by(Paper.id)
+        ).scalars()
+        return next(
+            (
+                paper
+                for paper in papers
+                if "".join(
+                    character
+                    for character in normalize("NFD", paper.name.casefold())
+                    if not combining(character)
+                )
+                == normalized_name
+            ),
+            None,
+        )
+
+    def get_plotter_rates_for_finish(self, finish_id: int) -> list[PlotterPricing]:
+        """Return every explicit Plotter rate for a finish."""
+        return list(
+            self._session.execute(
+                select(PlotterPricing).where(PlotterPricing.finish_id == finish_id)
+            ).scalars()
+        )
 
 
 class SQLUserRepository(UserRepository):
@@ -604,6 +647,18 @@ class SQLPaperRepository(PaperRepository):
             statement = statement.where(Paper.deleted_at.is_(None))
         return list(self._session.execute(statement).scalars().all())
 
+    def get_plotter_papers(self) -> list[Paper]:
+        """Return active papers that have at least one Plotter catalog rate."""
+        statement = (
+            select(Paper)
+            .join(PlotterPricing, PlotterPricing.paper_id == Paper.id)
+            .where(Paper.deleted_at.is_(None))
+            .where(Paper.is_active.is_(True))
+            .distinct()
+            .order_by(Paper.name)
+        )
+        return list(self._session.execute(statement).scalars().all())
+
     def get_papers_by_color_mode(self, print_type: PrintType, color_mode: ColorMode) -> list[Paper]:
         """Get papers that have pricing for specific print type and color mode.
 
@@ -1012,6 +1067,18 @@ class SQLFinishRepository(FinishRepository):
             select(Finish)
             .where(Finish.deleted_at.is_(None))
             .where(Finish.is_active.is_(True))
+            .order_by(Finish.name)
+        )
+        return list(self._session.execute(statement).scalars().all())
+
+    def get_plotter_finishes(self) -> list[Finish]:
+        """Return active finishes that have at least one Plotter catalog rate."""
+        statement = (
+            select(Finish)
+            .join(PlotterPricing, PlotterPricing.finish_id == Finish.id)
+            .where(Finish.deleted_at.is_(None))
+            .where(Finish.is_active.is_(True))
+            .distinct()
             .order_by(Finish.name)
         )
         return list(self._session.execute(statement).scalars().all())

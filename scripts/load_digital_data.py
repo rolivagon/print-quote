@@ -1,30 +1,11 @@
 """Add the canonical digital catalog to the configured PostgreSQL database."""
 
+from catalog_loader import CatalogCollector, existing_finish, existing_paper
 from seed_digital_data import create_digital_finishes, create_digital_papers
 from sqlalchemy import select, text
 
 from quote.repo.database import SessionLocal, configure_database
 from quote.repo.models import Finish, FinishPricing, Paper, PaperPricing
-
-
-class CatalogCollector:
-    """Collect seed models in memory while assigning temporary relationship IDs."""
-
-    def __init__(self) -> None:
-        self.records: list[Paper | Finish | PaperPricing | FinishPricing] = []
-        self._next_id = -1
-
-    def add(self, record: Paper | Finish | PaperPricing | FinishPricing) -> None:
-        self.records.append(record)
-
-    def add_all(self, records: list[PaperPricing | FinishPricing]) -> None:
-        self.records.extend(records)
-
-    def flush(self) -> None:
-        for record in self.records:
-            if record.id is None:
-                record.id = self._next_id
-                self._next_id -= 1
 
 
 def _catalog() -> CatalogCollector:
@@ -33,35 +14,6 @@ def _catalog() -> CatalogCollector:
     create_digital_papers(collector)
     create_digital_finishes(collector)
     return collector
-
-
-def _existing_paper(session, source: Paper) -> Paper:
-    paper = session.execute(select(Paper).where(Paper.name == source.name)).scalars().first()
-    if paper is not None:
-        return paper
-    paper = Paper(
-        name=source.name,
-        weight=source.weight,
-        description=source.description,
-        is_active=source.is_active,
-    )
-    session.add(paper)
-    session.flush()
-    return paper
-
-
-def _existing_finish(session, source: Finish) -> Finish:
-    finish = session.execute(select(Finish).where(Finish.name == source.name)).scalars().first()
-    if finish is not None:
-        return finish
-    finish = Finish(
-        name=source.name,
-        description=source.description,
-        is_active=source.is_active,
-    )
-    session.add(finish)
-    session.flush()
-    return finish
 
 
 def _price_exists(session, model, owner_id: int, source: PaperPricing | FinishPricing) -> bool:
@@ -94,12 +46,12 @@ def load_digital_data() -> None:
         # Prevent simultaneous operational runs from both inserting the same missing row.
         session.execute(text("select pg_advisory_xact_lock(7298456271309842)"))
         papers = {
-            paper.id: _existing_paper(session, paper)
+            paper.id: existing_paper(session, paper)
             for paper in catalog.records
             if isinstance(paper, Paper)
         }
         finishes = {
-            finish.id: _existing_finish(session, finish)
+            finish.id: existing_finish(session, finish)
             for finish in catalog.records
             if isinstance(finish, Finish)
         }

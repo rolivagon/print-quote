@@ -250,7 +250,7 @@ const createProduct = async () => {
     } else if (props.quoteData.print_type === 'plotter') {
       quoteDataPayload = {
         ...quoteDataPayload,
-        material_type: props.quoteData.paper_id ? String(props.quoteData.paper_id) : 'sintetico',
+        material_type: props.paperName || 'sintetico',
         minimum_m2: 0.5,
       }
     }

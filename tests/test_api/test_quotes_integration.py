@@ -10,8 +10,21 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from quote.domain.enums import PrintType, Unit
-from quote.repo.models import Finish, FinishPricing, Paper, PaperPricing
+from quote.domain.enums import PlotterBillingMetric, PrintType, Unit
+from quote.repo.models import (
+    Finish,
+    FinishPricing,
+    Paper,
+    PaperPricing,
+    PlotterPricing,
+    QuoteItem,
+    QuoteItemFinish,
+)
+
+
+def parse_clp(value: str) -> Decimal:
+    """Convert an API-formatted CLP amount into a Decimal."""
+    return Decimal(value.replace("$", "").replace(".", "").replace(",", "."))
 
 
 class TestDigitalQuotesIntegration:
@@ -128,27 +141,71 @@ class TestDigitalQuotesIntegration:
         )
 
         # Verify costs match unit tests
-        api_material_cost = Decimal(
-            str(item["material_cost"]).replace("$", "").replace(".", "").replace(",", ".")
-        )
+        api_material_cost = parse_clp(item["material_cost"])
         assert api_material_cost == expected["sheet_cost"], (
             f"material_cost mismatch: API={api_material_cost}, expected={expected['sheet_cost']}"
         )
 
-        api_finishing_cost = Decimal(
-            str(item["finishing_cost"]).replace("$", "").replace(".", "").replace(",", ".")
-        )
+        api_finishing_cost = parse_clp(item["finishing_cost"])
         assert api_finishing_cost == expected["finishing_cost"], (
             f"finishing_cost mismatch: API={api_finishing_cost}, "
             f"expected={expected['finishing_cost']}"
         )
 
-        api_subtotal = Decimal(
-            str(item["subtotal_before_losses"]).replace("$", "").replace(".", "").replace(",", ".")
-        )
+        api_subtotal = parse_clp(item["subtotal_before_losses"])
         assert api_subtotal == expected["subtotal_before_markup"], (
             f"subtotal mismatch: API={api_subtotal}, expected={expected['subtotal_before_markup']}"
         )
+
+    def test_multi_item_quote_totals_match_rounded_item_nets(
+        self,
+        authorized_client: TestClient,
+        api_seeded_db: tuple[Session, dict],
+        flyer_500_case: dict,
+        digital_price_table: dict,
+        digital_finishing_prices: dict,
+    ):
+        """Quote subtotal must equal the sum of item nets before IVA."""
+        db_session, seed_data = api_seeded_db
+        paper_couche = seed_data["paper_couche"]
+        finish_cut = seed_data["finish_cut"]
+
+        self.setup_paper_pricing_for_test(db_session, paper_couche, digital_price_table["4/0"])
+        self.setup_finishing_pricing(
+            db_session, finish_cut, digital_finishing_prices["corte_recto"]["price"]
+        )
+
+        item = {
+            "name": "Flyers Test",
+            "print_type": "digital",
+            "quantity": flyer_500_case["quantity"],
+            "width_cm": flyer_500_case["width_cm"],
+            "height_cm": flyer_500_case["height_cm"],
+            "paper_id": paper_couche.id,
+            "color_mode": "4/0",
+            "sheet_config": {"usable_width_cm": 31.0, "usable_height_cm": 46.0},
+            "finishes": [finish_cut.id],
+            "loss_percentage": 0,
+        }
+        response = authorized_client.post(
+            "/api/quotes/",
+            json={"client_id": seed_data["client_company"].id, "items": [item, item]},
+        )
+
+        assert response.status_code == 201, response.text
+        quote = response.json()
+        subtotal = parse_clp(quote["subtotal"])
+        tax = parse_clp(quote["tax"])
+        total = parse_clp(quote["total"])
+
+        assert subtotal + tax == total
+        assert subtotal == sum(parse_clp(item["net_before_iva"]) for item in quote["items"])
+        assert tax == sum(parse_clp(item["iva_amount"]) for item in quote["items"])
+        assert total == sum(parse_clp(item["total_final"]) for item in quote["items"])
+        for quote_item in quote["items"]:
+            assert parse_clp(quote_item["net_before_iva"]) + parse_clp(
+                quote_item["iva_amount"]
+            ) == parse_clp(quote_item["total_final"])
 
     def test_digital_20_diplomas_matches_unit_test(
         self,
@@ -217,9 +274,7 @@ class TestDigitalQuotesIntegration:
         assert item["pieces_per_sheet"] == expected["pieces_per_sheet"]
         assert item["sheets_needed"] == expected["sheets_needed"]
 
-        api_material_cost = Decimal(
-            str(item["material_cost"]).replace("$", "").replace(".", "").replace(",", ".")
-        )
+        api_material_cost = parse_clp(item["material_cost"])
         assert api_material_cost == expected["sheet_cost"], (
             f"material_cost mismatch: API={api_material_cost}, expected={expected['sheet_cost']}"
         )
@@ -288,24 +343,18 @@ class TestDigitalQuotesIntegration:
         assert item["pieces_per_sheet"] == expected["pieces_per_sheet"]
         assert item["sheets_needed"] == expected["sheets_needed"]
 
-        api_material_cost = Decimal(
-            str(item["material_cost"]).replace("$", "").replace(".", "").replace(",", ".")
-        )
+        api_material_cost = parse_clp(item["material_cost"])
         assert api_material_cost == expected["sheet_cost"], (
             f"material_cost mismatch: API={api_material_cost}, expected={expected['sheet_cost']}"
         )
 
-        api_finishing_cost = Decimal(
-            str(item["finishing_cost"]).replace("$", "").replace(".", "").replace(",", ".")
-        )
+        api_finishing_cost = parse_clp(item["finishing_cost"])
         assert api_finishing_cost == expected["finishing_cost"], (
             f"finishing_cost mismatch: API={api_finishing_cost}, "
             f"expected={expected['finishing_cost']}"
         )
 
-        api_subtotal = Decimal(
-            str(item["subtotal_before_losses"]).replace("$", "").replace(".", "").replace(",", ".")
-        )
+        api_subtotal = parse_clp(item["subtotal_before_losses"])
         assert api_subtotal == expected["subtotal_before_markup"], (
             f"subtotal mismatch: API={api_subtotal}, expected={expected['subtotal_before_markup']}"
         )
@@ -313,6 +362,51 @@ class TestDigitalQuotesIntegration:
 
 class TestPlotterQuotesIntegration:
     """Plotter quote API integration tests matching unit test cases."""
+
+    @staticmethod
+    def _amount(value: str) -> Decimal:
+        return parse_clp(value)
+
+    @staticmethod
+    def _payload(client_id: int, width_cm: int, finish_id: int | None = None) -> dict:
+        item = {
+            "name": "Plotter catalog test",
+            "print_type": "plotter",
+            "quantity": 1,
+            "width_cm": width_cm,
+            "height_cm": 100,
+            "material_type": "SINTETICO",
+            "color_mode": "4/0",
+            "sheet_config": {"usable_width_cm": 100.0, "usable_height_cm": 100.0},
+            "loss_percentage": 0,
+        }
+        if finish_id is not None:
+            item["finishes"] = [finish_id]
+        return {"client_id": client_id, "items": [item]}
+
+    @staticmethod
+    def _seed_catalog_material(db_session: Session) -> Paper:
+        paper = Paper(name="SINTÉTICO", weight=1)
+        db_session.add(paper)
+        db_session.flush()
+        db_session.add_all(
+            [
+                PlotterPricing(
+                    paper_id=paper.id,
+                    billing_metric=PlotterBillingMetric.SQM,
+                    minimum=minimum,
+                    maximum=maximum,
+                    unit_price=unit_price,
+                )
+                for minimum, maximum, unit_price in [
+                    (Decimal("1"), Decimal("5"), Decimal("10000")),
+                    (Decimal("5.01"), Decimal("20"), Decimal("8000")),
+                    (Decimal("20.01"), Decimal("100"), Decimal("7000")),
+                ]
+            ]
+        )
+        db_session.commit()
+        return paper
 
     def test_plotter_afiche_70x50_matches_unit_test(
         self,
@@ -333,26 +427,7 @@ class TestPlotterQuotesIntegration:
         """
         db_session, seed_data = api_seeded_db
         client_company = seed_data["client_company"]
-
-        # Create material paper for plotter
-        paper_sintetico = Paper(
-            name="Sintetico",
-            weight=200,
-            description="Papel sintetico para plotter",
-            is_active=True,
-        )
-        db_session.add(paper_sintetico)
-        db_session.flush()
-
-        # Add plotter pricing
-        pricing = PaperPricing(
-            paper_id=paper_sintetico.id,
-            print_type=PrintType.PLOTTER,
-            min_quantity=1,
-            max_quantity=None,
-            unit_price=plotter_price_table["sintetico"],
-        )
-        db_session.add(pricing)
+        self._seed_catalog_material(db_session)
 
         # Create finishing
         finish_corte = Finish(
@@ -363,12 +438,11 @@ class TestPlotterQuotesIntegration:
         db_session.add(finish_corte)
         db_session.flush()
 
-        finish_pricing = FinishPricing(
+        finish_pricing = PlotterPricing(
             finish_id=finish_corte.id,
-            print_type=PrintType.PLOTTER,
-            unit=Unit.JOB,
-            min_quantity=1,
-            max_quantity=None,
+            billing_metric=PlotterBillingMetric.SQM,
+            minimum=Decimal("1"),
+            maximum=Decimal("5"),
             unit_price=plotter_finishing_prices["corte_recto"]["price"],
         )
         db_session.add(finish_pricing)
@@ -384,7 +458,6 @@ class TestPlotterQuotesIntegration:
                     "quantity": afiche_plotter_case["quantity"],
                     "width_cm": afiche_plotter_case["width_cm"],
                     "height_cm": afiche_plotter_case["height_cm"],
-                    "material_type": "sintetico",
                     "color_mode": "4/0",
                     "minimum_m2": 0.25,
                     "sheet_config": {
@@ -402,23 +475,94 @@ class TestPlotterQuotesIntegration:
 
         data = response.json()
         item = data["items"][0]
-        expected = afiche_plotter_case["expected"]
+        # 70 x 50 cm is charged at the approved minimum of 1 m².
+        api_material_cost = parse_clp(item["material_cost"])
+        assert api_material_cost == Decimal("10000")
 
-        # Verify calculations match unit tests
-        api_material_cost = Decimal(
-            str(item["material_cost"]).replace("$", "").replace(".", "").replace(",", ".")
+        api_finishing_cost = parse_clp(item["finishing_cost"])
+        assert api_finishing_cost == Decimal("1000")
+        quote_item = db_session.query(QuoteItem).filter_by(name="Afiche Plotter Test").one()
+        quote_finish = (
+            db_session.query(QuoteItemFinish).filter_by(quote_item_id=quote_item.id).one()
         )
-        assert api_material_cost == expected["material_cost"], (
-            f"material_cost mismatch: API={api_material_cost}, expected={expected['material_cost']}"
-        )
+        assert db_session.get(Paper, quote_item.paper_id).name == "SINTÉTICO"
+        assert quote_item.paper_unit_price == Decimal("10000")
+        assert quote_item.paper_cost == Decimal("10000")
+        assert quote_finish.unit_price == Decimal("1000")
+        assert quote_item.details_json["production_calculation"]["pricing"]["plotter_rate"] == {
+            "metric": "sqm",
+            "minimum": 1.0,
+            "maximum": 5.0,
+            "unit_price": 10000.0,
+            "metric_value": 1.0,
+            "cost": 10000.0,
+        }
 
-        api_finishing_cost = Decimal(
-            str(item["finishing_cost"]).replace("$", "").replace(".", "").replace(",", ".")
+    def test_plotter_api_uses_persisted_boundaries_and_reports_absent_rates(
+        self, authorized_client: TestClient, api_seeded_db: tuple[Session, dict]
+    ):
+        db_session, seed_data = api_seeded_db
+        self._seed_catalog_material(db_session)
+        for width_cm, expected in [
+            (500, 50000),
+            (501, 40080),
+            (2000, 160000),
+            (2001, 140070),
+            (10000, 700000),
+        ]:
+            response = authorized_client.post(
+                "/api/quotes/", json=self._payload(seed_data["client_company"].id, width_cm)
+            )
+            assert response.status_code == 201, response.text
+            assert self._amount(response.json()["items"][0]["material_cost"]) == Decimal(expected)
+
+        response = authorized_client.post(
+            "/api/quotes/", json=self._payload(seed_data["client_company"].id, 10001)
         )
-        assert api_finishing_cost == expected["finishing_cost"], (
-            f"finishing_cost mismatch: API={api_finishing_cost}, "
-            f"expected={expected['finishing_cost']}"
+        assert response.status_code == 400
+        assert "No explicit Plotter rate" in response.json()["detail"]
+
+    def test_plotter_api_reports_empty_finish_ranges_and_uses_quantity_metric(
+        self, authorized_client: TestClient, api_seeded_db: tuple[Session, dict]
+    ):
+        db_session, seed_data = api_seeded_db
+        self._seed_catalog_material(db_session)
+        empty_finish = Finish(name="TROQUELADO")
+        quantity_finish = Finish(name="OJETILLOS")
+        db_session.add_all([empty_finish, quantity_finish])
+        db_session.flush()
+        db_session.add_all(
+            [
+                PlotterPricing(
+                    finish_id=empty_finish.id,
+                    billing_metric=PlotterBillingMetric.SQM,
+                    minimum=Decimal("1"),
+                    maximum=Decimal("5"),
+                    unit_price=Decimal("9000"),
+                ),
+                PlotterPricing(
+                    finish_id=quantity_finish.id,
+                    billing_metric=PlotterBillingMetric.JOB_QUANTITY,
+                    minimum=Decimal("1"),
+                    maximum=Decimal("200"),
+                    unit_price=Decimal("400"),
+                ),
+            ]
         )
+        db_session.commit()
+
+        no_rate = authorized_client.post(
+            "/api/quotes/",
+            json=self._payload(seed_data["client_company"].id, 600, empty_finish.id),
+        )
+        assert no_rate.status_code == 400
+        assert "No explicit Plotter rate" in no_rate.json()["detail"]
+
+        payload = self._payload(seed_data["client_company"].id, 100, quantity_finish.id)
+        payload["items"][0]["quantity"] = 12
+        response = authorized_client.post("/api/quotes/", json=payload)
+        assert response.status_code == 201, response.text
+        assert self._amount(response.json()["items"][0]["finishing_cost"]) == Decimal("4800")
 
 
 class TestOffsetQuotesIntegration:

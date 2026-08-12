@@ -1,12 +1,36 @@
 """Plotter printing pricing calculations."""
 
+from dataclasses import dataclass
 from decimal import Decimal
 
-from quote.domain.enums import FinishingMode, Unit
+from quote.domain.enums import FinishingMode, PlotterBillingMetric, Unit
 from quote.domain.models import Item, QuoteBreakdown
 
 from .base import PricingEngine, PricingStrategy
 from .money import apply_markup, apply_vat, round_money
+
+
+class MissingPlotterRateError(ValueError):
+    """Raised when the Plotter catalog has no explicit rate for a metric."""
+
+
+@dataclass(frozen=True)
+class PlotterRate:
+    """An explicitly published, net-CLP Plotter rate."""
+
+    minimum: Decimal
+    maximum: Decimal
+    billing_metric: PlotterBillingMetric
+    unit_price: Decimal
+
+
+@dataclass(frozen=True)
+class PlotterCharge:
+    """The selected Plotter rate, its billing metric, and net amount."""
+
+    rate: PlotterRate
+    metric: Decimal
+    amount: Decimal
 
 
 class PlotterPricingStrategy(PricingStrategy):
@@ -19,6 +43,59 @@ class PlotterPricingStrategy(PricingStrategy):
     def calculate_square_meters(self, width_cm: float, height_cm: float) -> Decimal:
         """Calculate square meters from cm dimensions."""
         return (Decimal(str(width_cm)) * Decimal(str(height_cm))) / Decimal("10000")
+
+    def billable_sqm(self, width_cm: Decimal, height_cm: Decimal, quantity: int) -> Decimal:
+        """Return the approved one-square-metre-minimum metric for the complete job."""
+        area = (width_cm * height_cm / Decimal("10000")) * Decimal(quantity)
+        return max(Decimal("1"), area)
+
+    def select_rate(
+        self,
+        rates: list[PlotterRate],
+        billing_metric: PlotterBillingMetric,
+        metric: Decimal,
+    ) -> PlotterRate:
+        """Select only a catalog rate that explicitly covers the given metric."""
+        for rate in rates:
+            if rate.billing_metric == billing_metric and rate.minimum <= metric <= rate.maximum:
+                return rate
+        raise MissingPlotterRateError(
+            f"No explicit Plotter rate for {billing_metric.value} metric {metric}"
+        )
+
+    def calculate_amount(
+        self,
+        rates: list[PlotterRate],
+        *,
+        quantity: int,
+        width_cm: Decimal | None = None,
+        height_cm: Decimal | None = None,
+    ) -> Decimal:
+        """Calculate net CLP from a catalog whose billing metric is unambiguous."""
+        return self.calculate_charge(
+            rates, quantity=quantity, width_cm=width_cm, height_cm=height_cm
+        ).amount
+
+    def calculate_charge(
+        self,
+        rates: list[PlotterRate],
+        *,
+        quantity: int,
+        width_cm: Decimal | None = None,
+        height_cm: Decimal | None = None,
+    ) -> PlotterCharge:
+        """Select one rate and calculate its net CLP charge for the job."""
+        metrics = {rate.billing_metric for rate in rates}
+        if len(metrics) != 1:
+            raise ValueError("Plotter catalog rates have mixed billing metrics")
+        billing_metric = metrics.pop()
+        metric = Decimal(quantity)
+        if billing_metric == PlotterBillingMetric.SQM:
+            if width_cm is None or height_cm is None:
+                raise ValueError("width_cm and height_cm are required for square-metre pricing")
+            metric = self.billable_sqm(width_cm, height_cm, quantity)
+        rate = self.select_rate(rates, billing_metric, metric)
+        return PlotterCharge(rate=rate, metric=metric, amount=metric * rate.unit_price)
 
     def apply_minimum_charge(self, actual_m2: Decimal, minimum_m2: Decimal) -> Decimal:
         """Apply minimum charge for plotter jobs."""

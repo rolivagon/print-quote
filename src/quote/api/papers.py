@@ -52,6 +52,11 @@ def list_papers(
     """
     paper_repo = SQLPaperRepository(db)
 
+    # Plotter materials use the separate plotter_pricing catalog and do not
+    # have a color mode.
+    if print_type == PrintType.PLOTTER:
+        return paper_repo.get_plotter_papers()
+
     # If print_type and color_mode are provided, filter papers by availability
     if print_type is not None and color_mode is not None:
         return paper_repo.get_papers_by_color_mode(print_type, color_mode)

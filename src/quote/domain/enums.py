@@ -60,6 +60,13 @@ class Unit(Enum):
     PER_ITEM = "per_item"
 
 
+class PlotterBillingMetric(Enum):
+    """Metric used to select and apply a Plotter catalog rate."""
+
+    SQM = "sqm"
+    JOB_QUANTITY = "job_quantity"
+
+
 class FinishingMode(Enum):
     """Finishing price calculation mode."""
 

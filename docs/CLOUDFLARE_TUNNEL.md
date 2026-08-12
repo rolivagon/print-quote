@@ -56,6 +56,18 @@ make tunnel
 make tunnel PORT=9000
 ```
 
+### Compartir el servidor de desarrollo
+
+Con `make dev` ejecutándose, expón Vite (no la API) para conservar recarga en caliente:
+
+```bash
+cloudflared tunnel --url http://localhost:5173
+```
+
+Las solicitudes a `/api` se reenvían desde Vite a la API local en el puerto 5001 y `/supabase`
+al Supabase local en el puerto 54321. No configures `VITE_API_URL` ni `VITE_SUPABASE_URL` como
+`localhost`: en un navegador remoto, `localhost` apunta al equipo visitante.
+
 ## 🔧 Solución de Problemas
 
 ### Error: "cloudflared: command not found"

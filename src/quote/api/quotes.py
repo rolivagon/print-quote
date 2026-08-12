@@ -4,7 +4,6 @@ from decimal import Decimal
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from quote.api.deps import get_current_user, get_db
@@ -40,7 +39,7 @@ from quote.domain.enums import PrintType, QuoteStatus, UserRole
 from quote.pricing.digital import DigitalPricingStrategy
 from quote.pricing.offset import OffsetPricingStrategy
 from quote.pricing.packing import PackingCalculator
-from quote.pricing.plotter import PlotterPricingStrategy
+from quote.pricing.plotter import MissingPlotterRateError, PlotterPricingStrategy, PlotterRate
 from quote.repo.models import User
 from quote.repo.sql_quote_repo import SQLQuoteRepository
 from quote.repo.sql_repo import SQLMasterRepository
@@ -204,85 +203,53 @@ def _calculate_plotter_quote(
     strategy = PlotterPricingStrategy()
     master_repo = SQLMasterRepository(db)
 
-    # 1. Get material price from database
-    # For plotter, we need to map material_type to a paper or use default
-    # First try to find paper by name matching material_type
-    from quote.repo.models import Paper
-
-    statement = select(Paper).where(func.lower(Paper.name).like(f"%{data.material_type.lower()}%"))
-    paper = db.execute(statement).scalars().first()
-
-    if paper:
-        paper_pricing = master_repo.get_paper_price(
-            paper_id=paper.id,
-            print_type=PrintType.PLOTTER,
-            quantity=data.quantity,
-        )
-    else:
-        # Fallback: use any paper with plotter pricing
-        papers = master_repo.get_all_active_papers()
-        paper_pricing = None
-        for p in papers:
-            pricing = master_repo.get_paper_price(
-                paper_id=p.id,
-                print_type=PrintType.PLOTTER,
-                quantity=data.quantity,
-            )
-            if pricing:
-                paper_pricing = pricing
-                break
-
-    if not paper_pricing:
+    # Repositories supply catalog records; pricing owns their validation and selection.
+    paper = master_repo.get_plotter_paper_by_name(data.material_type)
+    if paper is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"No pricing found for material '{data.material_type}' with plotter",
+            detail=f"No Plotter catalog material named '{data.material_type}'",
         )
-
-    # 2. Build price table with material_type as key
-    price_m2 = paper_pricing.unit_price
-    price_table = {data.material_type: price_m2}
-
-    # 3. Calculate square meters per unit
-    m2_unit = strategy.calculate_square_meters(
-        data.dimensions.width_cm,
-        data.dimensions.height_cm,
-    )
-
-    # 4. Apply minimum charge
-    billable_m2 = strategy.apply_minimum_charge(m2_unit, Decimal(str(data.minimum_m2)))
-
-    # 5. Calculate material cost per unit
-    material_cost_unit = strategy.calculate_material_cost(
-        billable_m2, data.material_type, price_table
-    )
-
-    # 6. Total material cost for quantity
-    material_cost = material_cost_unit * data.quantity
-
-    # 7. Calculate finishing cost with proper names
-    finishing_cost = Decimal("0")
-    finishing_prices = {}
-    for finish_item in data.finishes:
-        finish_pricing = master_repo.get_finish_price(
-            finish_id=finish_item.finish_id,
-            print_type=PrintType.PLOTTER,
+    material_rates = [
+        PlotterRate(rate.minimum, rate.maximum, rate.billing_metric, rate.unit_price)
+        for rate in master_repo.get_plotter_rates_for_paper(paper.id)
+    ]
+    width_cm = Decimal(str(data.dimensions.width_cm))
+    height_cm = Decimal(str(data.dimensions.height_cm))
+    actual_sqm = strategy.calculate_square_meters(width_cm, height_cm) * Decimal(data.quantity)
+    billable_m2 = strategy.billable_sqm(width_cm, height_cm, data.quantity)
+    try:
+        material_cost = strategy.calculate_amount(
+            material_rates,
             quantity=data.quantity,
+            width_cm=width_cm,
+            height_cm=height_cm,
         )
-        if finish_pricing:
-            from quote.repo.models import Finish
+    except (MissingPlotterRateError, ValueError) as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
 
-            finish = db.get(Finish, finish_item.finish_id)
-            if finish:
-                finish_name = finish.name.lower().replace(" ", "_")
-                finishing_prices[finish_name] = {
-                    "mode": finish_pricing.unit.value,
-                    "price": finish_pricing.unit_price,
-                }
-                finishing_cost += strategy.calculate_finishing_cost(
-                    finishing_type=finish_name,
-                    quantity=data.quantity,
-                    finishing_prices=finishing_prices,
-                )
+    finishing_cost = Decimal("0")
+    for finish_item in data.finishes:
+        finish_rates = [
+            PlotterRate(rate.minimum, rate.maximum, rate.billing_metric, rate.unit_price)
+            for rate in master_repo.get_plotter_rates_for_finish(finish_item.finish_id)
+        ]
+        if not finish_rates:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"No Plotter catalog rate for finish ID {finish_item.finish_id}",
+            )
+        try:
+            finishing_cost += strategy.calculate_amount(
+                finish_rates,
+                quantity=data.quantity,
+                width_cm=width_cm,
+                height_cm=height_cm,
+            )
+        except (MissingPlotterRateError, ValueError) as error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)
+            ) from error
 
     # 8. Subtotal: material_cost + finishing_cost
     subtotal = material_cost + finishing_cost
@@ -312,7 +279,7 @@ def _calculate_plotter_quote(
         pieces_per_sheet=None,
         sheets_needed=None,
         total_sheets_with_merma=None,
-        square_meters=float(m2_unit),
+        square_meters=float(actual_sqm),
         billable_square_meters=float(billable_m2),
         material_cost=material_cost,
         finishing_cost=finishing_cost,
@@ -601,73 +568,127 @@ def create_quote(
                 detail=f"Invalid print type: {item_data.print_type}",
             )
 
-        # Get paper price for snapshot using sheets_needed, not quantity
         master_repo = SQLMasterRepository(db)
-        sheets_for_pricing = (
-            breakdown.sheets_needed if breakdown.sheets_needed else item_data.quantity
-        )
-
-        # Pass color_mode only for DIGITAL print type
-        color_mode_for_pricing = (
-            item_data.color_mode if item_data.print_type == PrintType.DIGITAL else None
-        )
-
-        paper_pricing = master_repo.get_paper_price(
-            paper_id=item_data.paper_id,
-            print_type=item_data.print_type,
-            quantity=sheets_for_pricing,  # BUG FIX: Use sheets_needed for pricing
-            color_mode=color_mode_for_pricing,
-        )
-        paper_unit_price = paper_pricing.unit_price if paper_pricing else Decimal("0")
-
-        # Get paper name from database
-        from quote.repo.models import Paper
-
-        paper = db.get(Paper, item_data.paper_id)
-        paper_name = paper.name if paper else None
-
-        # Calculate individual finish costs with names
-        finishes_info = []
-        for finish_id in item_data.finishes:
-            finish_pricing = master_repo.get_finish_price(
-                finish_id=finish_id,
-                print_type=item_data.print_type,
+        if item_data.print_type == PrintType.PLOTTER:
+            plotter_strategy = PlotterPricingStrategy()
+            paper = master_repo.get_plotter_paper_by_name(item_data.material_type or "sintetico")
+            if paper is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST, detail="Plotter material missing"
+                )
+            width_cm = Decimal(str(item_data.width_cm))
+            height_cm = Decimal(str(item_data.height_cm))
+            material_charge = plotter_strategy.calculate_charge(
+                [
+                    PlotterRate(rate.minimum, rate.maximum, rate.billing_metric, rate.unit_price)
+                    for rate in master_repo.get_plotter_rates_for_paper(paper.id)
+                ],
                 quantity=item_data.quantity,
+                width_cm=width_cm,
+                height_cm=height_cm,
             )
-            if finish_pricing:
-                from quote.repo.models import Finish
+            paper_id = paper.id
+            paper_name = paper.name
+            paper_unit_price = material_charge.rate.unit_price
+            paper_cost = material_charge.amount
+            plotter_rate = {
+                "metric": material_charge.rate.billing_metric.value,
+                "minimum": float(material_charge.rate.minimum),
+                "maximum": float(material_charge.rate.maximum),
+                "unit_price": float(material_charge.rate.unit_price),
+                "metric_value": float(material_charge.metric),
+                "cost": float(material_charge.amount),
+            }
+            finishes_info = []
+            from quote.repo.models import Finish
 
+            for finish_id in item_data.finishes:
                 finish = db.get(Finish, finish_id)
-                if finish:
-                    # Calculate individual finish cost
-                    finish_name = finish.name
-                    unit_price = finish_pricing.unit_price
-                    unit = finish_pricing.unit.value
-
-                    # Calculate cost based on unit type
-                    if unit == "job":
-                        calculated_cost = unit_price
-                    elif unit == "per_item":
-                        calculated_cost = unit_price * Decimal(str(item_data.quantity))
-                    elif unit == "per_1000":
-                        calculated_cost = (
-                            unit_price * Decimal(str(item_data.quantity)) / Decimal("1000")
+                if finish is None:
+                    continue
+                charge = plotter_strategy.calculate_charge(
+                    [
+                        PlotterRate(
+                            rate.minimum, rate.maximum, rate.billing_metric, rate.unit_price
                         )
-                    elif unit == "sheet":
-                        sheets = breakdown.sheets_needed or item_data.quantity
-                        calculated_cost = unit_price * Decimal(str(sheets))
-                    else:
-                        calculated_cost = unit_price
+                        for rate in master_repo.get_plotter_rates_for_finish(finish_id)
+                    ],
+                    quantity=item_data.quantity,
+                    width_cm=width_cm,
+                    height_cm=height_cm,
+                )
+                finishes_info.append(
+                    {
+                        "id": finish_id,
+                        "name": finish.name,
+                        "unit_price": format_clp(charge.rate.unit_price),
+                        "unit": charge.rate.billing_metric.value,
+                        "calculated_cost": format_clp(charge.amount),
+                        "plotter_rate": {
+                            "metric": charge.rate.billing_metric.value,
+                            "minimum": float(charge.rate.minimum),
+                            "maximum": float(charge.rate.maximum),
+                            "metric_value": float(charge.metric),
+                            "cost": float(charge.amount),
+                        },
+                    }
+                )
+        else:
+            sheets_for_pricing = breakdown.sheets_needed or item_data.quantity
+            color_mode_for_pricing = (
+                item_data.color_mode if item_data.print_type == PrintType.DIGITAL else None
+            )
+            paper_pricing = master_repo.get_paper_price(
+                paper_id=item_data.paper_id,
+                print_type=item_data.print_type,
+                quantity=sheets_for_pricing,
+                color_mode=color_mode_for_pricing,
+            )
+            paper_unit_price = paper_pricing.unit_price if paper_pricing else Decimal("0")
+            paper_id = item_data.paper_id
+            paper_name = None
+            paper_cost = breakdown.paper_cost
+            finishes_info = []
+            from quote.repo.models import Paper
 
-                    finishes_info.append(
-                        {
-                            "id": finish_id,
-                            "name": finish_name,
-                            "unit_price": format_clp(unit_price),
-                            "unit": unit,
-                            "calculated_cost": format_clp(calculated_cost),
-                        }
-                    )
+            paper = db.get(Paper, paper_id) if paper_id is not None else None
+            paper_name = paper.name if paper else None
+            for finish_id in item_data.finishes:
+                finish_pricing = master_repo.get_finish_price(
+                    finish_id=finish_id,
+                    print_type=item_data.print_type,
+                    quantity=item_data.quantity,
+                )
+                if finish_pricing:
+                    from quote.repo.models import Finish
+
+                    finish = db.get(Finish, finish_id)
+                    if finish:
+                        unit_price = finish_pricing.unit_price
+                        unit = finish_pricing.unit.value
+                        if unit == "job":
+                            calculated_cost = unit_price
+                        elif unit == "per_item":
+                            calculated_cost = unit_price * Decimal(str(item_data.quantity))
+                        elif unit == "per_1000":
+                            calculated_cost = (
+                                unit_price * Decimal(str(item_data.quantity)) / Decimal("1000")
+                            )
+                        elif unit == "sheet":
+                            calculated_cost = unit_price * Decimal(
+                                str(breakdown.sheets_needed or item_data.quantity)
+                            )
+                        else:
+                            calculated_cost = unit_price
+                        finishes_info.append(
+                            {
+                                "id": finish_id,
+                                "name": finish.name,
+                                "unit_price": format_clp(unit_price),
+                                "unit": unit,
+                                "calculated_cost": format_clp(calculated_cost),
+                            }
+                        )
 
         # Build item data with calculation details
         quote_items.append(
@@ -676,7 +697,7 @@ def create_quote(
                 "description": item_data.description,
                 "print_type": item_data.print_type,
                 "color_mode": item_data.color_mode,
-                "paper_id": item_data.paper_id,
+                "paper_id": paper_id,
                 "width": Decimal(str(item_data.width_cm)),
                 "height": Decimal(str(item_data.height_cm)),
                 "quantity": item_data.quantity,
@@ -692,7 +713,7 @@ def create_quote(
                 "plates_cost": breakdown.plates_cost,
                 "run_cost": breakdown.run_cost,
                 "fixed_costs": breakdown.fixed_costs,
-                "paper_cost": breakdown.paper_cost,
+                "paper_cost": paper_cost,
                 "loss_percentage": item_data.loss_percentage,
                 "subtotal_before_losses": breakdown.subtotal_before_markup,
                 "subtotal_with_losses": breakdown.subtotal_with_markup,
@@ -701,10 +722,11 @@ def create_quote(
                 # Extra data for details_json and response
                 "paper_name": paper_name,
                 "finishes_info": finishes_info,
+                "plotter_rate": plotter_rate if item_data.print_type == PrintType.PLOTTER else None,
             }
         )
 
-        total_subtotal += breakdown.subtotal_with_markup
+        total_subtotal += breakdown.net_before_iva
         total_tax += breakdown.iva_amount
         total_final += breakdown.total_final
 
@@ -756,6 +778,7 @@ def create_quote(
                 "pricing": {
                     "paper_unit_price": float(item["paper_unit_price"]),
                     "currency": "CLP",
+                    **({"plotter_rate": item["plotter_rate"]} if item["plotter_rate"] else {}),
                 },
             },
             "cost_breakdown": {
@@ -922,6 +945,7 @@ def create_quote(
                 loss_percentage=item.loss_percentage,
                 subtotal_before_losses=format_clp(item.subtotal_before_losses),
                 subtotal_with_losses=format_clp(item.subtotal_with_losses),
+                net_before_iva=format_clp(item.total_final - item.iva_amount),
                 iva_amount=format_clp(item.iva_amount),
                 total_final=format_clp(item.total_final),
             )
@@ -1081,6 +1105,7 @@ def get_quote(
                 loss_percentage=item.loss_percentage,
                 subtotal_before_losses=format_clp(item.subtotal_before_losses),
                 subtotal_with_losses=format_clp(item.subtotal_with_losses),
+                net_before_iva=format_clp(item.total_final - item.iva_amount),
                 iva_amount=format_clp(item.iva_amount),
                 total_final=format_clp(item.total_final),
             )

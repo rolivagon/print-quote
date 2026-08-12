@@ -1,10 +1,7 @@
-// API Configuration - Centralized for easy changes
-// In development: use localhost:5001/api
-// In production: use relative path /api (backend serves frontend)
-const isProduction = import.meta.env.PROD
+// Use the current origin by default. Vite proxies /api to the local backend in development.
 
 export const API_CONFIG = {
-  BASE_URL: import.meta.env.VITE_API_URL || (isProduction ? '/api' : 'http://localhost:5001/api'),
+  BASE_URL: import.meta.env.VITE_API_URL || '/api',
   TIMEOUT: 30000, // 30 seconds
 }
 

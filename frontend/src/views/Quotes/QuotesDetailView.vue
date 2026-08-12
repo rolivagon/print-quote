@@ -232,7 +232,7 @@
                 </div>
                 <div class="text-right">
                   <p class="text-2xl font-bold text-brand-600 dark:text-brand-400">
-                    {{ item.total_final || '$0' }}
+                    {{ item.net_before_iva || '$0' }}
                   </p>
                 </div>
               </div>

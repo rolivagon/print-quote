@@ -4,15 +4,21 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
-from quote.domain.enums import ClientType, PrintType, Unit
+from quote.domain.enums import ClientType, PlotterBillingMetric, PrintType, Unit
 from quote.repo.models import (
     BaseMeasurement,
     Finish,
     FinishPricing,
     Paper,
     PaperPricing,
+    PlotterPricing,
 )
-from quote.repo.sql_repo import SQLClientRepository, SQLMasterRepository
+from quote.repo.sql_repo import (
+    SQLClientRepository,
+    SQLFinishRepository,
+    SQLMasterRepository,
+    SQLPaperRepository,
+)
 
 
 class TestSQLMasterRepositoryPaperPricing:
@@ -140,6 +146,74 @@ class TestSQLMasterRepositoryPaperPricing:
         assert offset_price is not None
         assert digital_price.unit_price == Decimal("500")
         assert offset_price.unit_price == Decimal("150")
+
+    def test_get_plotter_papers_returns_only_active_catalog_materials(self, db_session: Session):
+        """Should list papers backed by the Plotter catalog, not paper pricing."""
+        repo = SQLPaperRepository(db_session)
+        catalog_paper = Paper(name="Lona PVC", weight=1, is_active=True)
+        inactive_paper = Paper(name="Inactive Material", weight=1, is_active=False)
+        regular_paper = Paper(name="Couche", weight=300, is_active=True)
+        db_session.add_all([catalog_paper, inactive_paper, regular_paper])
+        db_session.flush()
+        db_session.add_all(
+            [
+                PlotterPricing(
+                    paper_id=catalog_paper.id,
+                    billing_metric=PlotterBillingMetric.SQM,
+                    minimum=Decimal("0"),
+                    maximum=Decimal("10"),
+                    unit_price=Decimal("1000"),
+                ),
+                PlotterPricing(
+                    paper_id=inactive_paper.id,
+                    billing_metric=PlotterBillingMetric.SQM,
+                    minimum=Decimal("0"),
+                    maximum=Decimal("10"),
+                    unit_price=Decimal("1000"),
+                ),
+            ]
+        )
+        db_session.commit()
+
+        result = repo.get_plotter_papers()
+
+        assert [paper.name for paper in result] == ["Lona PVC"]
+
+
+class TestSQLFinishRepositoryPlotterCatalog:
+    """Tests for Plotter finish catalog queries."""
+
+    def test_get_plotter_finishes_returns_only_active_catalog_finishes(self, db_session: Session):
+        """Should list finishes backed by the Plotter catalog."""
+        repo = SQLFinishRepository(db_session)
+        catalog_finish = Finish(name="Ojetillos", is_active=True)
+        inactive_finish = Finish(name="Inactive Finish", is_active=False)
+        regular_finish = Finish(name="Laminado", is_active=True)
+        db_session.add_all([catalog_finish, inactive_finish, regular_finish])
+        db_session.flush()
+        db_session.add_all(
+            [
+                PlotterPricing(
+                    finish_id=catalog_finish.id,
+                    billing_metric=PlotterBillingMetric.JOB_QUANTITY,
+                    minimum=Decimal("1"),
+                    maximum=Decimal("10"),
+                    unit_price=Decimal("500"),
+                ),
+                PlotterPricing(
+                    finish_id=inactive_finish.id,
+                    billing_metric=PlotterBillingMetric.JOB_QUANTITY,
+                    minimum=Decimal("1"),
+                    maximum=Decimal("10"),
+                    unit_price=Decimal("500"),
+                ),
+            ]
+        )
+        db_session.commit()
+
+        result = repo.get_plotter_finishes()
+
+        assert [finish.name for finish in result] == ["Ojetillos"]
 
 
 class TestSQLMasterRepositoryFinishPricing:
