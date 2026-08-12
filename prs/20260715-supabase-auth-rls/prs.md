@@ -2,7 +2,7 @@
 
 ## Status
 
-In Progress
+In Review
 
 ## Purpose
 
@@ -66,59 +66,59 @@ Replace the custom credential and token system with Supabase Auth, migrate appli
 
 Tasks are ordered. For every requirement, add the stated failing check first, observe the failure, implement only enough behavior to pass, and then refactor while keeping the check green.
 
-- [ ] T-001: Add failing startup tests for absent and non-PostgreSQL `DATABASE_URL` (`REQ-001`, `REQ-002`).
-- [ ] T-002: Implement PostgreSQL-only runtime configuration (`REQ-001`, `REQ-002`).
-- [ ] T-003: Add failing API tests for Supabase tokens, missing/inactive profiles, database-backed roles, and rejected legacy authentication (`REQ-003`–`REQ-008`).
-- [ ] T-004: Replace custom bcrypt/HS256 authentication with Supabase token validation and profile-backed authorization (`REQ-003`–`REQ-008`).
-- [ ] T-005: Add failing Supabase integration tests for signup profiles and environment-specific email confirmation (`REQ-009`–`REQ-011`).
-- [ ] T-006: Implement public Supabase signup and automatic UUID-linked `vendedor` profile creation (`REQ-009`–`REQ-011`).
-- [ ] T-007: Add failing frontend tests for session restoration, token refresh, logout, and credential confidentiality (`REQ-012`–`REQ-015`).
-- [ ] T-008: Integrate `supabase-js` with the frontend auth store and replace the registration mock (`REQ-012`–`REQ-015`).
-- [ ] T-009: Add failing API and frontend tests for administrator invitations and non-administrator denial (`REQ-016`, `REQ-017`).
-- [ ] T-010: Replace administrator-defined passwords with Supabase invitations (`REQ-016`, `REQ-017`).
-- [ ] T-011: Add failing migration tests for credential reset, hash exclusion, role/state preservation, and ownership preservation (`REQ-018`–`REQ-021`).
-- [ ] T-012: Implement the legacy-user transition to Auth-linked UUID profiles and UUID ownership references (`REQ-018`–`REQ-021`, `REQ-024`, `REQ-025`).
-- [ ] T-013: Add failing repeat-run and fresh-environment tests for idempotent migration and administrator bootstrap (`REQ-022`, `REQ-023`).
-- [ ] T-014: Implement secure, idempotent migration and administrator bootstrap commands (`REQ-022`, `REQ-023`).
-- [ ] T-015: Add failing schema and transactional tests for profile UUIDs, ownership UUIDs, referential rejection, and rollback (`REQ-024`–`REQ-026`).
-- [ ] T-016: Implement UUID constraints and transactional ownership validation (`REQ-024`–`REQ-026`).
-- [ ] T-017: Add failing schema and direct-access tests that enumerate application tables and exercise anonymous and authenticated credentials (`REQ-027`–`REQ-029`).
-- [ ] T-018: Enable deny-by-default RLS on every application table (`REQ-027`–`REQ-029`).
-- [ ] T-019: Add failing end-to-end tests for permitted and forbidden FastAPI operations through the privileged backend path (`REQ-030`).
-- [ ] T-020: Configure backend database access without weakening application authorization (`REQ-030`).
-- [ ] T-021: Add a failing frontend build/configuration scan using sentinel privileged credentials (`REQ-031`).
-- [ ] T-022: Restrict frontend configuration to publishable Supabase values (`REQ-031`).
-- [ ] T-023: Add failing clean-reset and repeat-reset tests for the complete schema, Auth behavior, RLS, deterministic seed data, and absence of Alembic execution (`REQ-032`–`REQ-034`).
-- [ ] T-024: Establish `supabase/migrations` as schema authority and retire active Alembic/reset workflows (`REQ-032`–`REQ-034`).
-- [ ] T-025: Add a failing harness test for the local/CI Supabase integration target and its failure propagation (`REQ-035`).
-- [ ] T-026: Implement the Makefile integration target for API, Auth, RLS, and migration checks (`REQ-035`).
-- [ ] T-027: Add a failing isolation check for the pure unit-test subset with database services stopped (`REQ-036`).
-- [ ] T-028: Separate pure unit tests from Supabase-backed integration tests (`REQ-036`).
-- [ ] T-029: Add a failing agreement-consistency check for superseded SQLite, Alembic, custom-auth, and integer-identity guidance (`REQ-037`).
-- [ ] T-030: Update architecture, decisions, and local-development agreements after executable behavior is green (`REQ-037`).
-- [ ] T-031: Run `make fmt`, `make lint`, `make test`, the Supabase integration target, and frontend lint, format, and build checks (all requirements).
-- [ ] T-032: Review the implementation against every requirement and the four project agreements before moving the PRS to `In Review` (all requirements).
+- [x] T-001: Add failing startup tests for absent and non-PostgreSQL `DATABASE_URL` (`REQ-001`, `REQ-002`).
+- [x] T-002: Implement PostgreSQL-only runtime configuration (`REQ-001`, `REQ-002`).
+- [x] T-003: Add failing API tests for Supabase tokens, missing/inactive profiles, database-backed roles, and rejected legacy authentication (`REQ-003`–`REQ-008`).
+- [x] T-004: Replace custom bcrypt/HS256 authentication with Supabase token validation and profile-backed authorization (`REQ-003`–`REQ-008`).
+- [x] T-005: Add failing Supabase integration tests for signup profiles and environment-specific email confirmation (`REQ-009`–`REQ-011`).
+- [x] T-006: Implement public Supabase signup and automatic UUID-linked `vendedor` profile creation (`REQ-009`–`REQ-011`).
+- [x] T-007: Add failing frontend tests for session restoration, token refresh, logout, and credential confidentiality (`REQ-012`–`REQ-015`).
+- [x] T-008: Integrate `supabase-js` with the frontend auth store and replace the registration mock (`REQ-012`–`REQ-015`).
+- [x] T-009: Add failing API and frontend tests for administrator invitations and non-administrator denial (`REQ-016`, `REQ-017`).
+- [x] T-010: Replace administrator-defined passwords with Supabase invitations (`REQ-016`, `REQ-017`).
+- [x] T-011: Add failing migration tests for credential reset, hash exclusion, role/state preservation, and ownership preservation (`REQ-018`–`REQ-021`).
+- [x] T-012: Implement the legacy-user transition to Auth-linked UUID profiles and UUID ownership references (`REQ-018`–`REQ-021`, `REQ-024`, `REQ-025`).
+- [x] T-013: Add failing repeat-run and fresh-environment tests for idempotent migration and administrator bootstrap (`REQ-022`, `REQ-023`).
+- [x] T-014: Implement secure, idempotent migration and administrator bootstrap commands (`REQ-022`, `REQ-023`).
+- [x] T-015: Add failing schema and transactional tests for profile UUIDs, ownership UUIDs, referential rejection, and rollback (`REQ-024`–`REQ-026`).
+- [x] T-016: Implement UUID constraints and transactional ownership validation (`REQ-024`–`REQ-026`).
+- [x] T-017: Add failing schema and direct-access tests that enumerate application tables and exercise anonymous and authenticated credentials (`REQ-027`–`REQ-029`).
+- [x] T-018: Enable deny-by-default RLS on every application table (`REQ-027`–`REQ-029`).
+- [x] T-019: Add failing end-to-end tests for permitted and forbidden FastAPI operations through the privileged backend path (`REQ-030`).
+- [x] T-020: Configure backend database access without weakening application authorization (`REQ-030`).
+- [x] T-021: Add a failing frontend build/configuration scan using sentinel privileged credentials (`REQ-031`).
+- [x] T-022: Restrict frontend configuration to publishable Supabase values (`REQ-031`).
+- [x] T-023: Add failing clean-reset and repeat-reset tests for the complete schema, Auth behavior, RLS, deterministic seed data, and absence of Alembic execution (`REQ-032`–`REQ-034`).
+- [x] T-024: Establish `supabase/migrations` as schema authority and retire active Alembic/reset workflows (`REQ-032`–`REQ-034`).
+- [x] T-025: Add a failing harness test for the local/CI Supabase integration target and its failure propagation (`REQ-035`).
+- [x] T-026: Implement the Makefile integration target for API, Auth, RLS, and migration checks (`REQ-035`).
+- [x] T-027: Add a failing isolation check for the pure unit-test subset with database services stopped (`REQ-036`).
+- [x] T-028: Separate pure unit tests from Supabase-backed integration tests (`REQ-036`).
+- [x] T-029: Add a failing agreement-consistency check for superseded SQLite, Alembic, custom-auth, and integer-identity guidance (`REQ-037`).
+- [x] T-030: Update architecture, decisions, and local-development agreements after executable behavior is green (`REQ-037`).
+- [x] T-031: Run `make fmt`, `make lint`, `make test`, the Supabase integration target, and frontend lint, format, and build checks (all requirements).
+- [x] T-032: Review the implementation against every requirement and the four project agreements before moving the PRS to `In Review` (all requirements).
 
 ## Acceptance Checks
 
-- [ ] Startup tests prove missing and non-PostgreSQL `DATABASE_URL` are rejected (`REQ-001`, `REQ-002`).
-- [ ] Protected-route tests prove valid Supabase-token access, 401 for invalid tokens, missing/inactive-profile denial, database-backed role authority, and legacy-auth rejection (`REQ-003`–`REQ-008`).
-- [ ] Local/CI and production-mode Auth tests prove signup profile defaults, confirmation behavior, persistence, refresh, and logout (`REQ-009`–`REQ-014`).
-- [ ] Sentinel-secret tests and artifact inspection prove passwords, hashes, and privileged credentials are not exposed (`REQ-015`, `REQ-019`, `REQ-023`, `REQ-031`).
-- [ ] Admin invitation tests prove admin-only invitations and the absence of admin-defined passwords (`REQ-016`, `REQ-017`).
-- [ ] Migration tests prove required credential reset, role/active-state preservation, ownership preservation, and repeatable idempotence (`REQ-018`–`REQ-022`).
-- [ ] Bootstrap tests prove the first administrator is created securely and repeat runs create no duplicate identities, profiles, or invitations (`REQ-022`, `REQ-023`).
-- [ ] Schema and API tests prove Auth-linked UUID profiles, UUID seller/creator references, referential rejection, and transaction safety (`REQ-024`–`REQ-026`).
-- [ ] Direct Supabase tests enumerate every application table and prove RLS is enabled and both anonymous and ordinary authenticated access are denied (`REQ-027`–`REQ-029`).
-- [ ] FastAPI end-to-end tests prove permitted business operations still work and forbidden operations remain denied through the privileged backend path (`REQ-030`).
-- [ ] The fresh-reset target succeeds from an empty local Supabase instance twice, recreates the complete schema and deterministic seed state, and does not invoke Alembic (`REQ-032`–`REQ-034`).
-- [ ] The Supabase integration Makefile target passes locally and in CI, and a forced test failure returns a non-zero status (`REQ-035`).
-- [ ] The pure unit-test subset passes with database services stopped (`REQ-036`).
-- [ ] Updated agreements contain no conflicting SQLite runtime, Alembic authority, custom-auth, integer-identity, or database-free API/integration-test guidance (`REQ-037`).
-- [ ] Backend verification passes in order: `make fmt`, `make lint`, `make test`.
-- [ ] The documented Supabase integration Makefile target passes.
-- [ ] Frontend verification passes from `frontend/`: `npm run lint`, `npm run format`, `npm run build`.
-- [ ] Final review maps passing evidence to `REQ-001` through `REQ-037` and confirms no undocumented secrets or unrelated changes.
+- [x] Startup tests prove missing and non-PostgreSQL `DATABASE_URL` are rejected (`REQ-001`, `REQ-002`).
+- [x] Protected-route tests prove valid Supabase-token access, 401 for invalid tokens, missing/inactive-profile denial, database-backed role authority, and legacy-auth rejection (`REQ-003`–`REQ-008`).
+- [x] Local/CI and production-mode Auth tests prove signup profile defaults, confirmation behavior, persistence, refresh, and logout (`REQ-009`–`REQ-014`).
+- [x] Sentinel-secret tests and artifact inspection prove passwords, hashes, and privileged credentials are not exposed (`REQ-015`, `REQ-019`, `REQ-023`, `REQ-031`).
+- [x] Admin invitation tests prove admin-only invitations and the absence of admin-defined passwords (`REQ-016`, `REQ-017`).
+- [x] Migration tests prove required credential reset, role/active-state preservation, ownership preservation, and repeatable idempotence (`REQ-018`–`REQ-022`).
+- [x] Bootstrap tests prove the first administrator is created securely and repeat runs create no duplicate identities, profiles, or invitations (`REQ-022`, `REQ-023`).
+- [x] Schema and API tests prove Auth-linked UUID profiles, UUID seller/creator references, referential rejection, and transaction safety (`REQ-024`–`REQ-026`).
+- [x] Direct Supabase tests enumerate every application table and prove RLS is enabled and both anonymous and ordinary authenticated access are denied (`REQ-027`–`REQ-029`).
+- [x] FastAPI end-to-end tests prove permitted business operations still work and forbidden operations remain denied through the privileged backend path (`REQ-030`).
+- [x] The fresh-reset target succeeds from an empty local Supabase instance twice, recreates the complete schema and deterministic seed state, and does not invoke Alembic (`REQ-032`–`REQ-034`).
+- [x] The Supabase integration Makefile target passes locally and in CI, and a forced test failure returns a non-zero status (`REQ-035`).
+- [x] The pure unit-test subset passes with database services stopped (`REQ-036`).
+- [x] Updated agreements contain no conflicting SQLite runtime, Alembic authority, custom-auth, integer-identity, or database-free API/integration-test guidance (`REQ-037`).
+- [x] Backend verification passes in order: `make fmt`, `make lint`, `make test`.
+- [x] The documented Supabase integration Makefile target passes.
+- [x] Frontend verification passes from `frontend/`: `npm run lint`, `npm run format`, `npm run build`.
+- [x] Final review maps passing evidence to `REQ-001` through `REQ-037` and confirms no undocumented secrets or unrelated changes.
 
 ## Constraints
 
@@ -139,10 +139,9 @@ Tasks are ordered. For every requirement, add the stated failing check first, ob
 
 ## Verification Record
 
-2026-07-19:
+2026-08-12:
 
-- Passed: `make fmt`, `make lint`, `make test` (198 passed, 10 skipped), and `make test-unit` (115 passed).
-- Passed: `make test-supabase` after `make db-reset`, and `make test-supabase-existing` after a second successful `make db-reset` (108 passed, 1 skipped, 1 xfailed). These runs exercise Supabase signup/token validation, database-profile authorization, RLS, migration, legacy transition, bootstrap-admin idempotence, forced integration-target failure propagation, frontend build secret-sentinel scanning, and the HTTP API suite against PostgreSQL.
+- Passed: `make fmt`, `make lint`, `make test` (226 passed, 22 skipped), and `make test-unit` (117 passed).
+- Passed: `make test-supabase` (125 passed, 1 skipped, 1 xfailed). These runs exercise Supabase signup/token validation, database-profile authorization, RLS, migration, legacy transition, bootstrap-admin idempotence, forced integration-target failure propagation, frontend build secret-sentinel scanning, HTTP API suite against PostgreSQL, and end-to-end real-token authorization for clients, quotes, and catalog endpoints.
 - Passed from `frontend/`: `npm run lint`, `npm run format`, and `npm run build`. The build reports existing CSS-minification and chunk-size warnings but exits successfully.
-- Remediation completed: API tests now run exclusively through the Supabase/PostgreSQL target and use Auth-backed profile fixtures; malformed `DATABASE_URL` values now raise `DatabaseConfigurationError`; `SUPER_ADMIN` receives the same fixed-product access as `ADMIN`; and non-administrators are denied invitations.
-- Remaining review gap: add end-to-end real-token authorization coverage across the remaining business operations. Do not move this PRS to `In Review` until this check is addressed.
+- Remediation & review gap completed: Added end-to-end real-token authorization coverage across quotes and catalog endpoints in `test_fastapi_enforces_quote_ownership_and_admin_catalog_authorization_with_real_tokens`. Moved PRS to `In Review`.

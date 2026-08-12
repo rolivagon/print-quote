@@ -689,6 +689,104 @@ def test_fastapi_enforces_client_ownership_with_real_tokens():
         engine.dispose()
 
 
+def test_fastapi_enforces_quote_ownership_and_admin_catalog_authorization_with_real_tokens():
+    """Quotes ownership and admin-only catalog endpoints are enforced with real tokens."""
+    base_url = os.environ["SUPABASE_URL"].rstrip("/")
+    _, owner_id, owner_token = _signup_user(base_url)
+    _, _, other_token = _signup_user(base_url)
+    tax_id = f"76.{uuid.uuid4().int % 10_000_000:07d}-5"
+    engine = create_engine(os.environ["DATABASE_URL"])
+    try:
+        with TestClient(app) as client:
+            # Create client owned by owner
+            client_res = client.post(
+                "/api/clients/",
+                headers={"Authorization": f"Bearer {owner_token}"},
+                json={
+                    "client_type": "company",
+                    "tax_id": tax_id,
+                    "company_name": "Quote Auth Test",
+                },
+            )
+            assert client_res.status_code == 201
+            client_id = client_res.json()["id"]
+
+            # Other seller cannot create quote for owner's client
+            quote_payload = {
+                "client_id": client_id,
+                "items": [
+                    {
+                        "name": "E2E Auth Quote",
+                        "print_type": "digital",
+                        "color_mode": "4/0",
+                        "quantity": 100,
+                        "width_cm": 10,
+                        "height_cm": 15,
+                        "paper_id": 1,
+                        "sheet_config": {"usable_width_cm": 30, "usable_height_cm": 45},
+                    }
+                ],
+            }
+            unauth_quote = client.post(
+                "/api/quotes/",
+                headers={"Authorization": f"Bearer {other_token}"},
+                json=quote_payload,
+            )
+            assert unauth_quote.status_code == 403
+
+            # Owner creates quote
+            auth_quote = client.post(
+                "/api/quotes/",
+                headers={"Authorization": f"Bearer {owner_token}"},
+                json=quote_payload,
+            )
+            assert auth_quote.status_code == 201
+            quote_id = auth_quote.json()["id"]
+
+            # Other seller cannot read owner's quote
+            assert (
+                client.get(
+                    f"/api/quotes/{quote_id}",
+                    headers={"Authorization": f"Bearer {other_token}"},
+                ).status_code
+                == 403
+            )
+
+            # Non-admin (vendedor) cannot create papers in catalog
+            paper_res = client.post(
+                "/api/papers/",
+                headers={"Authorization": f"Bearer {owner_token}"},
+                json={
+                    "name": f"Paper-{uuid.uuid4().hex[:6]}",
+                    "weight": 150,
+                    "is_active": True,
+                },
+            )
+            assert paper_res.status_code == 403
+
+        # Promote owner to ADMIN role in db
+        with engine.begin() as connection:
+            connection.execute(
+                text("update public.users set role = 'ADMIN' where id = :id"),
+                {"id": owner_id},
+            )
+
+        with TestClient(app) as client:
+            # Now owner (ADMIN) can create a paper
+            paper_res = client.post(
+                "/api/papers/",
+                headers={"Authorization": f"Bearer {owner_token}"},
+                json={
+                    "name": f"Paper-{uuid.uuid4().hex[:6]}",
+                    "weight": 150,
+                    "is_active": True,
+                },
+            )
+            assert paper_res.status_code == 201
+    finally:
+        engine.dispose()
+
+
 def test_invalid_profile_uuid_write_rolls_back_without_a_client():
     """Foreign keys reject a non-profile creator without leaving a partial row."""
     engine = create_engine(os.environ["DATABASE_URL"])
