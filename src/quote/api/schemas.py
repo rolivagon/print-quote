@@ -4,7 +4,15 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_serializer, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 from quote.domain.enums import (
     ClientType,
@@ -124,8 +132,38 @@ class PaperBase(BaseModel):
     is_active: bool = True
 
 
+class PaperInternalCostInput(EnumSchema):
+    print_type: PrintType
+    unit: Unit
+    paper_cost: Decimal | None = Field(default=None, ge=0)
+    printing_cost: Decimal | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def validate_paper_cost(self):
+        expected = Unit.SQM if self.print_type == PrintType.PLOTTER else Unit.SHEET
+        if self.unit != expected:
+            raise ValueError(
+                f"{self.print_type.value} paper internal costs require unit {expected.value}"
+            )
+        if self.paper_cost is None and self.printing_cost is None:
+            raise ValueError("paper internal cost row must configure paper_cost or printing_cost")
+        return self
+
+
+class PaperInternalCost(PaperInternalCostInput):
+    id: int
+    paper_id: int
+
+
 class PaperCreate(PaperBase):
-    pass
+    internal_costs: list[PaperInternalCostInput] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def reject_duplicate_internal_costs(self):
+        types = [cost.print_type for cost in self.internal_costs]
+        if len(types) != len(set(types)):
+            raise ValueError("duplicate paper internal cost print_type")
+        return self
 
 
 class PaperUpdate(BaseModel):
@@ -133,12 +171,22 @@ class PaperUpdate(BaseModel):
     weight: int | None = None
     description: str | None = None
     is_active: bool | None = None
+    internal_costs: list[PaperInternalCostInput] | None = None
+
+    @model_validator(mode="after")
+    def reject_duplicate_internal_costs(self):
+        if self.internal_costs is not None:
+            types = [cost.print_type for cost in self.internal_costs]
+            if len(types) != len(set(types)):
+                raise ValueError("duplicate paper internal cost print_type")
+        return self
 
 
 class Paper(PaperBase):
     id: int
     created_at: datetime
     updated_at: datetime | None = None
+    internal_costs: list[PaperInternalCost] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -150,20 +198,54 @@ class FinishBase(BaseModel):
     is_active: bool = True
 
 
+class FinishInternalCostInput(EnumSchema):
+    print_type: PrintType
+    unit: Unit
+    unit_cost: Decimal = Field(..., ge=0)
+
+    @model_validator(mode="after")
+    def validate_initial_finish_unit(self):
+        if self.unit != Unit.SHEET:
+            raise ValueError("finish internal costs currently support only unit sheet")
+        return self
+
+
+class FinishInternalCost(FinishInternalCostInput):
+    id: int
+    finish_id: int
+
+
 class FinishCreate(FinishBase):
-    pass
+    internal_costs: list[FinishInternalCostInput] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def reject_duplicate_internal_costs(self):
+        types = [cost.print_type for cost in self.internal_costs]
+        if len(types) != len(set(types)):
+            raise ValueError("duplicate finish internal cost print_type")
+        return self
 
 
 class FinishUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
     is_active: bool | None = None
+    internal_costs: list[FinishInternalCostInput] | None = None
+
+    @model_validator(mode="after")
+    def reject_duplicate_internal_costs(self):
+        if self.internal_costs is not None:
+            types = [cost.print_type for cost in self.internal_costs]
+            if len(types) != len(set(types)):
+                raise ValueError("duplicate finish internal cost print_type")
+        return self
 
 
 class Finish(FinishBase):
     id: int
     created_at: datetime
     updated_at: datetime | None = None
+    internal_costs: list[FinishInternalCost] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -627,6 +709,17 @@ class CalculationDetails(BaseModel):
     final_totals: FinalTotals = Field(..., description="Final totals")
 
 
+class InternalCostBreakdown(BaseModel):
+    """Administrator-only production cost snapshot."""
+
+    paper: str | None = None
+    printing: str | None = None
+    finishing: str | None = None
+    total: str = "$0"
+    offset_specific: OffsetSpecificCosts = Field(default_factory=OffsetSpecificCosts)
+    notices: list[str] = Field(default_factory=list)
+
+
 # Quote creation request
 class QuoteCreateRequest(EnumSchema):
     """Create quote request."""
@@ -643,6 +736,7 @@ class QuoteItemResponse(EnumSchema):
     name: str = Field(..., description="Item name")
     description: str | None = Field(None, description="Item description")
     calculation_details: CalculationDetails = Field(..., description="Complete calculation details")
+    internal_cost_breakdown: InternalCostBreakdown | None = None
 
     # Legacy fields for backward compatibility (deprecated)
     print_type: PrintType = Field(..., description="Type of printing")

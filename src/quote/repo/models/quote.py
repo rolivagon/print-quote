@@ -87,6 +87,11 @@ class QuoteItem(SQLModel, table=True):
     paper_cost: Decimal = Field(
         default=Decimal("0"), decimal_places=2, max_digits=12, description="Paper cost"
     )
+    internal_paper_cost: Decimal | None = Field(default=None, decimal_places=2, max_digits=12)
+    internal_printing_cost: Decimal | None = Field(default=None, decimal_places=2, max_digits=12)
+    internal_finishing_cost: Decimal | None = Field(default=None, decimal_places=2, max_digits=12)
+    internal_cost_total: Decimal | None = Field(default=None, decimal_places=2, max_digits=12)
+    internal_cost_snapshot: dict | None = Field(default=None, sa_column=Column(JSON))
     loss_percentage: float = Field(default=0, description="Loss percentage applied")
     subtotal_before_losses: Decimal = Field(
         default=Decimal("0"), decimal_places=2, max_digits=12, description="Subtotal before losses"

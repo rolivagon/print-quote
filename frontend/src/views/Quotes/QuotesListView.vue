@@ -291,7 +291,10 @@ const formatDate = (dateString: string | undefined) => {
 
 const formatCurrency = (amount: string | undefined) => {
   if (!amount) return '$0'
-  const num = parseFloat(amount)
+  const num = amount.startsWith('$')
+    ? Number(amount.slice(1).replace(/\./g, '').replace(',', '.'))
+    : Number(amount)
+  if (!Number.isFinite(num)) return '$0'
   return new Intl.NumberFormat('es-CL', {
     style: 'currency',
     currency: 'CLP',

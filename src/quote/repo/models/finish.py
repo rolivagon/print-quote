@@ -7,6 +7,7 @@ from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
     from quote.repo.models.finish_pricing import FinishPricing
+    from quote.repo.models.internal_cost import FinishInternalCost
 
 
 class Finish(SQLModel, table=True):
@@ -24,3 +25,6 @@ class Finish(SQLModel, table=True):
 
     # Relationships
     pricing: list["FinishPricing"] = Relationship(back_populates="finish")
+    internal_costs: list["FinishInternalCost"] = Relationship(
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )

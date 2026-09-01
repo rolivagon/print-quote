@@ -2,9 +2,9 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-from sqlmodel import select
+from sqlmodel import or_, select
 
 from quote.api.deps import get_current_user, get_db
 from quote.api.schemas import Client, ClientCreate, ClientUpdate
@@ -78,6 +78,7 @@ def list_clients(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[UserModel, Depends(get_current_user)],
     include_deleted: bool = False,
+    search: Annotated[str | None, Query()] = None,
 ):
     """List only owned clients unless the profile is an administrator."""
     statement = select(ClientModel)
@@ -85,6 +86,17 @@ def list_clients(
         statement = statement.where(ClientModel.deleted_at.is_(None))
     if not _can_manage_all_clients(current_user):
         statement = statement.where(ClientModel.created_by_id == current_user.id)
+    if search:
+        term = f"%{search.strip()}%"
+        statement = statement.where(
+            or_(
+                ClientModel.first_name.ilike(term),
+                ClientModel.last_name.ilike(term),
+                ClientModel.company_name.ilike(term),
+                ClientModel.tax_id.ilike(term),
+                ClientModel.email.ilike(term),
+            )
+        )
     return list(
         db.execute(statement.order_by(ClientModel.first_name, ClientModel.company_name)).scalars()
     )

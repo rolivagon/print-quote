@@ -3,10 +3,10 @@
 from decimal import Decimal
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from quote.api.deps import get_current_user, get_db
+from quote.api.deps import get_current_user, get_db, is_admin_role
 from quote.api.schemas import (
     CalculationBreakdown,
     CalculationDetails,
@@ -16,6 +16,7 @@ from quote.api.schemas import (
     DimensionsInfo,
     DirectCosts,
     FinalTotals,
+    InternalCostBreakdown,
     IvaInfo,
     LossesInfo,
     MarkupInfo,
@@ -43,8 +44,87 @@ from quote.pricing.plotter import MissingPlotterRateError, PlotterPricingStrateg
 from quote.repo.models import User
 from quote.repo.sql_quote_repo import SQLQuoteRepository
 from quote.repo.sql_repo import SQLMasterRepository
+from quote.service.internal_costs import calculate_internal_cost_breakdown
 
 router = APIRouter(prefix="/quotes", tags=["quotes"])
+
+
+def _internal_breakdown_response(item, is_admin: bool) -> InternalCostBreakdown | None:
+    if not is_admin or item.internal_cost_snapshot is None:
+        return None
+    snapshot = item.internal_cost_snapshot
+    results = snapshot.get("results", {})
+    legacy = {
+        "paper": snapshot.get("paper"),
+        "printing": snapshot.get("printing"),
+        "finishing": snapshot.get("finishing"),
+        "total": snapshot.get("total", "$0"),
+    }
+    values = {key: result.get("value") for key, result in results.items()}
+    values = {key: value for key, value in values.items() if value is not None}
+    legacy.update(values)
+
+    def format_snapshot_value(value):
+        if value is None or (isinstance(value, str) and value.startswith("$")):
+            return value
+        return format_clp(Decimal(str(value)))
+
+    return InternalCostBreakdown(
+        paper=format_snapshot_value(legacy["paper"]),
+        printing=format_snapshot_value(legacy["printing"]),
+        finishing=format_snapshot_value(legacy["finishing"]),
+        total=format_snapshot_value(legacy["total"]) or "$0",
+        notices=snapshot.get("notices", []),
+        offset_specific=OffsetSpecificCosts(
+            plates=format_clp(item.plates_cost),
+            printing_run=format_clp(item.run_cost),
+            fixed_costs=format_clp(item.fixed_costs),
+        ),
+    )
+
+
+@router.get("/", response_model=list[QuoteResponse], response_model_exclude_none=True)
+def list_quotes(
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    status_filter: Annotated[QuoteStatus | None, Query(alias="status")] = None,
+    client_id: int | None = None,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=100),
+):
+    """List quotes visible to the authenticated seller or administrator."""
+    quote_repo = SQLQuoteRepository(db)
+    if is_admin_role(current_user.role):
+        quotes = quote_repo.list_all(status=status_filter, skip=skip, limit=limit)
+    else:
+        quotes = quote_repo.list_by_seller(
+            seller_id=current_user.id,
+            status=status_filter,
+            skip=skip,
+            limit=limit,
+        )
+
+    if client_id is not None:
+        quotes = [quote for quote in quotes if quote.client_id == client_id]
+
+    from quote.api.schemas import Client
+
+    return [
+        QuoteResponse(
+            id=quote.id,
+            quote_number=quote.quote_number,
+            status=quote.status,
+            seller_id=quote.seller_id,
+            client_id=quote.client_id,
+            client=Client.model_validate(quote.client) if quote.client else None,
+            subtotal=format_clp(quote.subtotal),
+            tax=format_clp(quote.tax),
+            total=format_clp(quote.total),
+            created_at=quote.created_at,
+            updated_at=quote.updated_at,
+        )
+        for quote in quotes
+    ]
 
 
 def _build_finishing_prices(
@@ -471,7 +551,12 @@ def _calculate_offset_quote(
     )
 
 
-@router.post("/", response_model=QuoteResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=QuoteResponse,
+    response_model_exclude_none=True,
+    status_code=status.HTTP_201_CREATED,
+)
 def create_quote(
     db: Annotated[Session, Depends(get_db)],
     request: QuoteCreateRequest,
@@ -690,6 +775,20 @@ def create_quote(
                             }
                         )
 
+        internal_costs = calculate_internal_cost_breakdown(
+            db,
+            print_type=item_data.print_type,
+            paper_id=paper_id,
+            finish_ids=item_data.finishes,
+            quantity=item_data.quantity,
+            sheets=breakdown.total_sheets_with_merma or breakdown.sheets_needed,
+            billable_sqm=(
+                Decimal(str(breakdown.billable_square_meters))
+                if breakdown.billable_square_meters is not None
+                else None
+            ),
+        )
+
         # Build item data with calculation details
         quote_items.append(
             {
@@ -723,6 +822,7 @@ def create_quote(
                 "paper_name": paper_name,
                 "finishes_info": finishes_info,
                 "plotter_rate": plotter_rate if item_data.print_type == PrintType.PLOTTER else None,
+                "internal_costs": internal_costs,
             }
         )
 
@@ -789,6 +889,7 @@ def create_quote(
                         item["material_cost"] + item["finishing_cost"]
                     ),
                 },
+                "internal_production": item["internal_costs"].snapshot(),
                 "offset_specific_costs": {
                     "plates": format_clp(item["plates_cost"]),
                     "printing_run": format_clp(item["run_cost"]),
@@ -835,6 +936,11 @@ def create_quote(
             iva_amount=item["iva_amount"],
             total_final=item["total_final"],
             details_json=calculation_details,
+            internal_paper_cost=item["internal_costs"].paper.value,
+            internal_printing_cost=item["internal_costs"].printing.value,
+            internal_finishing_cost=item["internal_costs"].finishing.value,
+            internal_cost_total=item["internal_costs"].total,
+            internal_cost_snapshot=calculation_details["cost_breakdown"]["internal_production"],
         )
 
         # Add finishes to the item
@@ -924,6 +1030,9 @@ def create_quote(
                 name=item.name,
                 description=item.description,
                 calculation_details=calculation_details,
+                internal_cost_breakdown=_internal_breakdown_response(
+                    item, is_admin_role(current_user.role)
+                ),
                 # Legacy fields for backward compatibility
                 print_type=item.print_type,
                 color_mode=item.color_mode,
@@ -984,7 +1093,7 @@ def create_quote(
     )
 
 
-@router.get("/{quote_id}", response_model=QuoteResponse)
+@router.get("/{quote_id}", response_model=QuoteResponse, response_model_exclude_none=True)
 def get_quote(
     quote_id: int,
     db: Annotated[Session, Depends(get_db)],
@@ -1085,6 +1194,9 @@ def get_quote(
                 name=item.name,
                 description=item.description,
                 calculation_details=calculation_details,
+                internal_cost_breakdown=_internal_breakdown_response(
+                    item, is_admin_role(current_user.role)
+                ),
                 print_type=item.print_type,
                 color_mode=item.color_mode,
                 paper_id=item.paper_id,

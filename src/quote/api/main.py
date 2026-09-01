@@ -38,7 +38,10 @@ async def validation_error_response(_, exc: RequestValidationError) -> JSONRespo
     """Return validation errors without echoing submitted request values."""
     errors = []
     for error in exc.errors():
-        errors.append({key: value for key, value in error.items() if key != "input"})
+        sanitized = {key: value for key, value in error.items() if key != "input"}
+        if "ctx" in sanitized:
+            sanitized["ctx"] = {key: str(value) for key, value in sanitized["ctx"].items()}
+        errors.append(sanitized)
     return JSONResponse(status_code=422, content={"detail": errors})
 
 

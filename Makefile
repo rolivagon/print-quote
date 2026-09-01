@@ -57,12 +57,21 @@ all: venv deps fmt lint test
 frontend-dev:
 	@$(LOCAL_SUPABASE_FRONTEND_ENV) && cd frontend && npm run dev
 
-# Kill processes using ports 5001, 5173, 5174
+# Kill the app's own dev servers (ports 5001, 5173, 5174) without relying on lsof.
+# pkill matches the project's process cmdlines; the netstat fallback frees any
+# orphaned reloader worker still bound to a target port (its cmdline only shows
+# --multiprocessing-fork, which is too generic to match safely).
 kill-ports:
 	@echo "Cleaning up ports $(API_PORT), $(FRONTEND_PORT), 5174..."
-	@lsof -ti:$(API_PORT) | xargs kill -9 2>/dev/null || true
-	@lsof -ti:$(FRONTEND_PORT) | xargs kill -9 2>/dev/null || true
-	@lsof -ti:5174 | xargs kill -9 2>/dev/null || true
+	@pkill -9 -f "quote.api.main:app" 2>/dev/null || true
+	@pkill -9 -f "frontend/node_modules/.bin/vite" 2>/dev/null || true
+	@for port in $(API_PORT) $(FRONTEND_PORT) 5174; do \
+		pids=$$(netstat -vanp tcp 2>/dev/null | awk -v port=".$$port" '$$4 ~ port"\$$" && $$6 == "LISTEN" {sub(/.*:/, "", $$11); print $$11}'); \
+		if [ -n "$$pids" ]; then \
+			echo "  Killing stragglers on port $$port: $$pids"; \
+			kill -9 $$pids 2>/dev/null || true; \
+		fi; \
+	done
 	@echo "Ports cleaned"
 
 # Run both backend and frontend simultaneously

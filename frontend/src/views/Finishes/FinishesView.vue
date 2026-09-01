@@ -346,6 +346,7 @@
           :target-name="selectedFinish.name"
           @saved="onPricingSaved"
         />
+        <InternalCostManager target-type="finish" :target-id="selectedFinish.id" />
       </div>
 
       <!-- Delete Confirmation Modal -->
@@ -399,6 +400,7 @@
 <script setup lang="ts">
 import AdminLayout from '@/components/layout/AdminLayout.vue'
 import PricingManager from '@/components/pricing/PricingManager.vue'
+import InternalCostManager from '@/components/pricing/InternalCostManager.vue'
 import { ref, computed, onMounted } from 'vue'
 import { useApi } from '@/composables/useApi'
 import type { Finish, CreateFinishRequest, UpdateFinishRequest } from '@/types'
@@ -577,7 +579,7 @@ const saveFinish = async () => {
       if (submitData.description !== editingFinish.value.description)
         updateData.description = submitData.description
 
-      await patch(`/finishes/${editingFinish.value.id}/`, updateData)
+      await patch(`/finishes/${editingFinish.value.id}`, updateData)
       successMessage.value = '¡Acabado actualizado exitosamente!'
       await loadFinishes()
       goToList()

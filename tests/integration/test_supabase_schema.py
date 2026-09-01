@@ -24,8 +24,15 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import sessionmaker
 
 from quote.api.main import app
-from quote.domain.enums import PlotterBillingMetric
-from quote.repo.models import Finish, FinishPricing, Paper, PaperPricing, PlotterPricing
+from quote.domain.enums import ColorMode, PlotterBillingMetric, PrintType, Unit
+from quote.repo.models import (
+    Finish,
+    FinishPricing,
+    Paper,
+    PaperInternalCost,
+    PaperPricing,
+    PlotterPricing,
+)
 from quote.service.supabase_admin import reset_password_user
 
 sys.path.insert(0, str(Path(__file__).parents[2] / "scripts"))
@@ -783,6 +790,100 @@ def test_fastapi_enforces_quote_ownership_and_admin_catalog_authorization_with_r
                 },
             )
             assert paper_res.status_code == 201
+    finally:
+        engine.dispose()
+
+
+def test_real_admin_and_seller_quote_responses_filter_internal_costs():
+    """Real Supabase tokens expose the historical breakdown only to admins."""
+    base_url = os.environ["SUPABASE_URL"].rstrip("/")
+    _, seller_id, seller_token = _signup_user(base_url)
+    _, admin_id, admin_token = _signup_user(base_url)
+    engine = create_engine(os.environ["DATABASE_URL"])
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text("update public.users set role = 'ADMIN' where id = :id"),
+                {"id": admin_id},
+            )
+        with TestClient(app) as client:
+            created_client = client.post(
+                "/api/clients/",
+                headers={"Authorization": f"Bearer {seller_token}"},
+                json={
+                    "client_type": "company",
+                    "tax_id": f"76.{uuid.uuid4().int % 10_000_000:07d}-6",
+                    "company_name": "Internal Cost HTTP Test",
+                },
+            )
+            assert created_client.status_code == 201
+            client_id = created_client.json()["id"]
+
+        session_factory = sessionmaker(bind=engine)
+        with session_factory() as session:
+            paper = Paper(name="HTTP Internal Paper", weight=300)
+            session.add(paper)
+            session.flush()
+            session.add_all(
+                [
+                    PaperPricing(
+                        paper_id=paper.id,
+                        print_type=PrintType.DIGITAL,
+                        color_mode=ColorMode.C4_4,
+                        min_quantity=1,
+                        unit_price=Decimal("1000"),
+                    ),
+                    PaperInternalCost(
+                        paper_id=paper.id,
+                        print_type=PrintType.DIGITAL,
+                        unit=Unit.SHEET,
+                        paper_cost=Decimal("0"),
+                        printing_cost=Decimal("2"),
+                    ),
+                ]
+            )
+            session.commit()
+            paper_id = paper.id
+
+        payload = {
+            "client_id": client_id,
+            "items": [
+                {
+                    "name": "Real HTTP historical quote",
+                    "print_type": "digital",
+                    "quantity": 10,
+                    "width_cm": 10,
+                    "height_cm": 15,
+                    "paper_id": paper_id,
+                    "color_mode": "4/4",
+                    "sheet_config": {"usable_width_cm": 31, "usable_height_cm": 46},
+                }
+            ],
+        }
+        with TestClient(app) as client:
+            created_quote = client.post(
+                "/api/quotes/",
+                headers={"Authorization": f"Bearer {seller_token}"},
+                json=payload,
+            )
+            assert created_quote.status_code == 201, created_quote.text
+            quote_id = created_quote.json()["id"]
+
+            seller_view = client.get(
+                f"/api/quotes/{quote_id}",
+                headers={"Authorization": f"Bearer {seller_token}"},
+            )
+            admin_view = client.get(
+                f"/api/quotes/{quote_id}",
+                headers={"Authorization": f"Bearer {admin_token}"},
+            )
+
+        assert seller_view.status_code == 200
+        assert "internal_cost_breakdown" not in seller_view.json()["items"][0]
+        assert admin_view.status_code == 200
+        admin_item = admin_view.json()["items"][0]
+        assert admin_item["internal_cost_breakdown"]["paper"] == "$0"
+        assert admin_item["internal_cost_breakdown"]["printing"] != "no indicado"
     finally:
         engine.dispose()
 

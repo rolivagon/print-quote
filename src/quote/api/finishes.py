@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from quote.api.deps import get_current_user, get_db, require_admin
+from quote.api.deps import get_current_user, get_db, is_admin_role, require_admin
 from quote.api.schemas import (
     Finish,
     FinishCreate,
@@ -21,6 +21,14 @@ from quote.repo.sql_repo import SQLFinishRepository
 router = APIRouter(prefix="/finishes", tags=["finishes"])
 
 
+def _public_finish(finish, current_user):
+    if is_admin_role(current_user.role):
+        return finish
+    data = Finish.model_validate(finish).model_dump()
+    data.pop("internal_costs", None)
+    return data
+
+
 @router.post("/", response_model=Finish, status_code=status.HTTP_201_CREATED)
 def create_finish(
     db: Annotated[Session, Depends(get_db)],
@@ -30,7 +38,11 @@ def create_finish(
     """Create a new finish. Only admins can create finishes."""
     finish_repo = SQLFinishRepository(db)
     try:
-        return finish_repo.create(name=finish_in.name, description=finish_in.description)
+        return finish_repo.create(
+            name=finish_in.name,
+            description=finish_in.description,
+            internal_costs=[cost.model_dump() for cost in finish_in.internal_costs],
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -45,8 +57,13 @@ def list_finishes(
     """List finishes, optionally restricted to a printing catalog."""
     finish_repo = SQLFinishRepository(db)
     if print_type == PrintType.PLOTTER:
-        return finish_repo.get_plotter_finishes()
-    return finish_repo.list_all(include_deleted=include_deleted)
+        return [
+            _public_finish(finish, current_user) for finish in finish_repo.get_plotter_finishes()
+        ]
+    return [
+        _public_finish(finish, current_user)
+        for finish in finish_repo.list_all(include_deleted=include_deleted)
+    ]
 
 
 @router.get("/{finish_id}", response_model=Finish)
@@ -60,7 +77,7 @@ def read_finish(
     finish = finish_repo.get_by_id(finish_id, include_deleted=True)
     if not finish:
         raise HTTPException(status_code=404, detail="Finish not found")
-    return finish
+    return _public_finish(finish, current_user)
 
 
 @router.patch("/{finish_id}", response_model=Finish)
@@ -73,7 +90,12 @@ def update_finish(
     """Update a finish. Only admins can update finishes."""
     finish_repo = SQLFinishRepository(db)
     try:
-        finish = finish_repo.update(finish_id, **finish_in.model_dump(exclude_unset=True))
+        values = finish_in.model_dump(exclude_unset=True)
+        if "internal_costs" in values:
+            values["internal_costs"] = [
+                cost.model_dump() for cost in finish_in.internal_costs or []
+            ]
+        finish = finish_repo.update(finish_id, **values)
         if not finish:
             raise HTTPException(status_code=404, detail="Finish not found")
         return finish

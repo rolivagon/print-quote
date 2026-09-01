@@ -399,7 +399,8 @@
         <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-gray-800">
           <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Actualizar contraseña</h3>
           <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
-            Define una nueva contraseña para <strong>{{ passwordUser?.name }}</strong>.
+            Define una nueva contraseña para <strong>{{ passwordUser?.name }}</strong
+            >.
           </p>
           <form class="mt-6 space-y-4" @submit.prevent="updatePassword">
             <div>
@@ -439,7 +440,9 @@
               </button>
               <button
                 type="submit"
-                :disabled="resettingPassword || !newPassword || newPassword !== passwordConfirmation"
+                :disabled="
+                  resettingPassword || !newPassword || newPassword !== passwordConfirmation
+                "
                 class="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <span>Actualizar</span>
@@ -502,12 +505,7 @@ import { useUserPasswordReset } from '@/composables/useUserPasswordReset'
 import { ref, computed, onMounted } from 'vue'
 import { useApi } from '@/composables/useApi'
 import { useAuthStore } from '@/stores/auth'
-import type {
-  User,
-  CreateUserRequest,
-  UpdateUserRequest,
-  UserRole,
-} from '@/types'
+import type { User, CreateUserRequest, UpdateUserRequest, UserRole } from '@/types'
 
 const authStore = useAuthStore()
 

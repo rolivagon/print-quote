@@ -365,6 +365,49 @@
                   </div>
                 </div>
 
+                <div
+                  v-if="isAdmin && item.internal_cost_breakdown"
+                  class="mb-4 rounded-lg border border-amber-200 bg-amber-50/50 p-4 dark:border-amber-900 dark:bg-amber-500/5"
+                >
+                  <h5 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Costos internos
+                  </h5>
+                  <div class="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
+                    <div>
+                      <p class="text-gray-500">Papel</p>
+                      <p class="font-mono">
+                        {{ item.internal_cost_breakdown.paper || 'no indicado' }}
+                      </p>
+                    </div>
+                    <div>
+                      <p class="text-gray-500">Impresión</p>
+                      <p class="font-mono">
+                        {{ item.internal_cost_breakdown.printing || 'no indicado' }}
+                      </p>
+                    </div>
+                    <div>
+                      <p class="text-gray-500">Terminaciones</p>
+                      <p class="font-mono">
+                        {{ item.internal_cost_breakdown.finishing || 'no indicado' }}
+                      </p>
+                    </div>
+                    <div>
+                      <p class="text-gray-500">Total</p>
+                      <p class="font-mono font-semibold">
+                        {{ item.internal_cost_breakdown.total }}
+                      </p>
+                    </div>
+                  </div>
+                  <ul
+                    v-if="item.internal_cost_breakdown.notices.length"
+                    class="mt-2 list-disc pl-5 text-xs text-amber-800"
+                  >
+                    <li v-for="notice in item.internal_cost_breakdown.notices" :key="notice">
+                      {{ notice }}
+                    </li>
+                  </ul>
+                </div>
+
                 <!-- Costos Offset (solo si aplica) -->
                 <div
                   v-if="item.print_type === 'offset'"

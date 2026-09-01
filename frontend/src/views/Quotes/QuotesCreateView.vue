@@ -290,10 +290,10 @@
                   <option value="">
                     {{
                       item.print_type === 'plotter'
-                         ? 'Selecciona un material'
-                         : item.color_mode
-                           ? 'Selecciona un papel'
-                           : 'Primero selecciona modo de color'
+                        ? 'Selecciona un material'
+                        : item.color_mode
+                          ? 'Selecciona un papel'
+                          : 'Primero selecciona modo de color'
                     }}
                   </option>
                   <option
@@ -544,9 +544,7 @@ const loadAvailablePapers = async (index: number) => {
 
   try {
     const colorMode = item.print_type === 'plotter' ? '' : `&color_mode=${item.color_mode}`
-    const response = await get<Paper[]>(
-      `/papers/?print_type=${item.print_type}${colorMode}`,
-    )
+    const response = await get<Paper[]>(`/papers/?print_type=${item.print_type}${colorMode}`)
     filteredPapers.value[index] = response || []
   } catch (error) {
     console.error('Error loading filtered papers:', error)

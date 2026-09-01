@@ -7,18 +7,32 @@ export interface Paper {
   is_active: boolean
   created_at?: string
   updated_at?: string
+  internal_costs?: PaperInternalCost[]
+}
+
+export interface PaperInternalCost {
+  id?: number
+  paper_id?: number
+  print_type: PrintType
+  unit: 'sheet' | 'sqm'
+  paper_cost?: string | number | null
+  printing_cost?: string | number | null
 }
 
 export interface CreatePaperRequest {
   name: string
   weight: number
   description?: string
+  internal_costs?: PaperInternalCostInput[]
 }
+
+export type PaperInternalCostInput = Omit<PaperInternalCost, 'id' | 'paper_id'>
 
 export interface UpdatePaperRequest {
   name?: string
   weight?: number
   description?: string
+  internal_costs?: PaperInternalCostInput[]
 }
 
 // Paper Pricing Types
@@ -53,16 +67,29 @@ export interface Finish {
   is_active: boolean
   created_at?: string
   updated_at?: string
+  internal_costs?: FinishInternalCost[]
 }
+
+export interface FinishInternalCost {
+  id?: number
+  finish_id?: number
+  print_type: PrintType
+  unit: Unit
+  unit_cost: string | number
+}
+
+export type FinishInternalCostInput = Omit<FinishInternalCost, 'id' | 'finish_id'>
 
 export interface CreateFinishRequest {
   name: string
   description?: string
+  internal_costs?: FinishInternalCostInput[]
 }
 
 export interface UpdateFinishRequest {
   name?: string
   description?: string
+  internal_costs?: FinishInternalCostInput[]
 }
 
 export interface FinishPricing {
@@ -225,6 +252,14 @@ export interface QuoteItemResponse extends QuoteItem {
       paper?: { name?: string }
       finishes?: Array<{ id: number; name: string; calculated_cost: string }>
     }
+  }
+  internal_cost_breakdown?: {
+    paper: string | null
+    printing: string | null
+    finishing: string | null
+    total: string
+    notices: string[]
+    offset_specific: { plates: string; printing_run: string; fixed_costs: string }
   }
 }
 

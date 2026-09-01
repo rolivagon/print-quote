@@ -379,6 +379,7 @@
           :target-name="selectedPaper.name"
           @saved="onPricingSaved"
         />
+        <InternalCostManager target-type="paper" :target-id="selectedPaper.id" />
       </div>
 
       <!-- Delete Confirmation Modal -->
@@ -434,6 +435,7 @@ import AdminLayout from '@/components/layout/AdminLayout.vue'
 import { ref, computed, onMounted } from 'vue'
 import { useApi } from '@/composables/useApi'
 import PricingManager from '@/components/pricing/PricingManager.vue'
+import InternalCostManager from '@/components/pricing/InternalCostManager.vue'
 import type { Paper, CreatePaperRequest, UpdatePaperRequest } from '@/types'
 
 type ViewMode = 'list' | 'form' | 'pricing'
@@ -626,7 +628,7 @@ const savePaper = async () => {
       if (submitData.description !== editingPaper.value.description)
         updateData.description = submitData.description
 
-      await patch(`/papers/${editingPaper.value.id}/`, updateData)
+      await patch(`/papers/${editingPaper.value.id}`, updateData)
       successMessage.value = '¡Papel actualizado exitosamente!'
       await loadPapers()
       goToList()

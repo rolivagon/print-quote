@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from quote.api.deps import get_current_user, get_db, require_admin
+from quote.api.deps import get_current_user, get_db, is_admin_role, require_admin
 from quote.api.schemas import (
     Paper,
     PaperCreate,
@@ -21,6 +21,14 @@ from quote.repo.sql_repo import SQLPaperRepository
 router = APIRouter(prefix="/papers", tags=["papers"])
 
 
+def _public_paper(paper, current_user):
+    if is_admin_role(current_user.role):
+        return paper
+    data = Paper.model_validate(paper).model_dump()
+    data.pop("internal_costs", None)
+    return data
+
+
 @router.post("/", response_model=Paper, status_code=status.HTTP_201_CREATED)
 def create_paper(
     db: Annotated[Session, Depends(get_db)],
@@ -31,7 +39,10 @@ def create_paper(
     paper_repo = SQLPaperRepository(db)
     try:
         return paper_repo.create(
-            name=paper_in.name, weight=paper_in.weight, description=paper_in.description
+            name=paper_in.name,
+            weight=paper_in.weight,
+            description=paper_in.description,
+            internal_costs=[cost.model_dump() for cost in paper_in.internal_costs],
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -55,13 +66,19 @@ def list_papers(
     # Plotter materials use the separate plotter_pricing catalog and do not
     # have a color mode.
     if print_type == PrintType.PLOTTER:
-        return paper_repo.get_plotter_papers()
+        return [_public_paper(paper, current_user) for paper in paper_repo.get_plotter_papers()]
 
     # If print_type and color_mode are provided, filter papers by availability
     if print_type is not None and color_mode is not None:
-        return paper_repo.get_papers_by_color_mode(print_type, color_mode)
+        return [
+            _public_paper(paper, current_user)
+            for paper in paper_repo.get_papers_by_color_mode(print_type, color_mode)
+        ]
 
-    return paper_repo.list_all(include_deleted=include_deleted)
+    return [
+        _public_paper(paper, current_user)
+        for paper in paper_repo.list_all(include_deleted=include_deleted)
+    ]
 
 
 @router.get("/{paper_id}", response_model=Paper)
@@ -75,7 +92,7 @@ def read_paper(
     paper = paper_repo.get_by_id(paper_id, include_deleted=True)
     if not paper:
         raise HTTPException(status_code=404, detail="Paper not found")
-    return paper
+    return _public_paper(paper, current_user)
 
 
 @router.patch("/{paper_id}", response_model=Paper)
@@ -88,7 +105,10 @@ def update_paper(
     """Update a paper. Only admins can update papers."""
     paper_repo = SQLPaperRepository(db)
     try:
-        paper = paper_repo.update(paper_id, **paper_in.model_dump(exclude_unset=True))
+        values = paper_in.model_dump(exclude_unset=True)
+        if "internal_costs" in values:
+            values["internal_costs"] = [cost.model_dump() for cost in paper_in.internal_costs or []]
+        paper = paper_repo.update(paper_id, **values)
         if not paper:
             raise HTTPException(status_code=404, detail="Paper not found")
         return paper

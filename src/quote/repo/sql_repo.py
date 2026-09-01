@@ -9,6 +9,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from quote.domain.enums import ClientType, ColorMode, FinishType, PrintType, Unit, UserRole
+from quote.pricing.internal_costs import validate_finish_unit, validate_paper_unit
 from quote.repo.interfaces import (
     ClientRepository,
     FinishRepository,
@@ -19,8 +20,10 @@ from quote.repo.models import (
     BaseMeasurement,
     Client,
     Finish,
+    FinishInternalCost,
     FinishPricing,
     Paper,
+    PaperInternalCost,
     PaperPricing,
     PlotterPricing,
     User,
@@ -574,6 +577,7 @@ class SQLPaperRepository(PaperRepository):
         name: str,
         weight: int,
         description: str | None = None,
+        internal_costs: list[dict] | None = None,
     ) -> Paper:
         """Create a new paper.
 
@@ -597,10 +601,44 @@ class SQLPaperRepository(PaperRepository):
             description=description,
             is_active=True,
         )
-        self._session.add(paper)
-        self._session.commit()
+        try:
+            self._session.add(paper)
+            self._session.flush()
+            self.replace_internal_costs(paper.id, internal_costs or [], commit=False)
+            self._session.commit()
+        except Exception:
+            self._session.rollback()
+            raise
         self._session.refresh(paper)
         return paper
+
+    def list_internal_costs(self, paper_id: int) -> list[PaperInternalCost]:
+        return list(
+            self._session.execute(
+                select(PaperInternalCost).where(PaperInternalCost.paper_id == paper_id)
+            ).scalars()
+        )
+
+    def replace_internal_costs(
+        self, paper_id: int, costs: list[dict], *, commit: bool = True
+    ) -> list[PaperInternalCost]:
+        print_types = [cost["print_type"] for cost in costs]
+        if len(print_types) != len(set(print_types)):
+            raise ValueError("duplicate paper internal cost print_type")
+        for cost in costs:
+            validate_paper_unit(cost["print_type"], cost["unit"])
+            if cost.get("paper_cost") is None and cost.get("printing_cost") is None:
+                raise ValueError(
+                    "paper internal cost row must configure paper_cost or printing_cost"
+                )
+        for existing in self.list_internal_costs(paper_id):
+            self._session.delete(existing)
+        self._session.flush()
+        for cost in costs:
+            self._session.add(PaperInternalCost(paper_id=paper_id, **cost))
+        if commit:
+            self._session.commit()
+        return self.list_internal_costs(paper_id)
 
     def get_by_id(self, paper_id: int, include_deleted: bool = False) -> Paper | None:
         """Get paper by ID.
@@ -703,6 +741,7 @@ class SQLPaperRepository(PaperRepository):
         weight: int | None = None,
         description: str | None = None,
         is_active: bool | None = None,
+        internal_costs: list[dict] | None = None,
     ) -> Paper | None:
         """Update paper information.
 
@@ -735,8 +774,13 @@ class SQLPaperRepository(PaperRepository):
         if is_active is not None:
             paper.is_active = is_active
 
+        if internal_costs is not None:
+            self.replace_internal_costs(paper_id, internal_costs, commit=False)
+
         paper.updated_at = datetime.utcnow()
         self._session.commit()
+        # The relationship may still contain deleted cost rows after replacement.
+        self._session.expire(paper, ["internal_costs"])
         self._session.refresh(paper)
         return paper
 
@@ -986,6 +1030,7 @@ class SQLFinishRepository(FinishRepository):
         self,
         name: str,
         description: str | None = None,
+        internal_costs: list[dict] | None = None,
     ) -> Finish:
         """Create a new finish.
 
@@ -1007,10 +1052,42 @@ class SQLFinishRepository(FinishRepository):
             description=description,
             is_active=True,
         )
-        self._session.add(finish)
-        self._session.commit()
+        try:
+            self._session.add(finish)
+            self._session.flush()
+            self.replace_internal_costs(finish.id, internal_costs or [], commit=False)
+            self._session.commit()
+        except Exception:
+            self._session.rollback()
+            raise
         self._session.refresh(finish)
         return finish
+
+    def list_internal_costs(self, finish_id: int) -> list[FinishInternalCost]:
+        return list(
+            self._session.execute(
+                select(FinishInternalCost).where(FinishInternalCost.finish_id == finish_id)
+            ).scalars()
+        )
+
+    def replace_internal_costs(
+        self, finish_id: int, costs: list[dict], *, commit: bool = True
+    ) -> list[FinishInternalCost]:
+        print_types = [cost["print_type"] for cost in costs]
+        if len(print_types) != len(set(print_types)):
+            raise ValueError("duplicate finish internal cost print_type")
+        for cost in costs:
+            validate_finish_unit(cost["print_type"], cost["unit"])
+            if Decimal(str(cost["unit_cost"])) < 0:
+                raise ValueError("internal cost must be non-negative")
+        for existing in self.list_internal_costs(finish_id):
+            self._session.delete(existing)
+        self._session.flush()
+        for cost in costs:
+            self._session.add(FinishInternalCost(finish_id=finish_id, **cost))
+        if commit:
+            self._session.commit()
+        return self.list_internal_costs(finish_id)
 
     def get_by_id(self, finish_id: int, include_deleted: bool = False) -> Finish | None:
         """Get finish by ID.
@@ -1091,6 +1168,7 @@ class SQLFinishRepository(FinishRepository):
         unit: Unit | None = None,
         description: str | None = None,
         is_active: bool | None = None,
+        internal_costs: list[dict] | None = None,
     ) -> Finish | None:
         """Update finish information.
 
@@ -1126,8 +1204,13 @@ class SQLFinishRepository(FinishRepository):
         if is_active is not None:
             finish.is_active = is_active
 
+        if internal_costs is not None:
+            self.replace_internal_costs(finish_id, internal_costs, commit=False)
+
         finish.updated_at = datetime.utcnow()
         self._session.commit()
+        # Reload the replaced relationship before response-model serialization.
+        self._session.expire(finish, ["internal_costs"])
         self._session.refresh(finish)
         return finish
 

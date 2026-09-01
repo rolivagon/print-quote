@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
+    from quote.repo.models.internal_cost import PaperInternalCost
     from quote.repo.models.paper_pricing import PaperPricing
 
 
@@ -25,3 +26,6 @@ class Paper(SQLModel, table=True):
 
     # Relationships
     pricing: list["PaperPricing"] = Relationship(back_populates="paper")
+    internal_costs: list["PaperInternalCost"] = Relationship(
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )

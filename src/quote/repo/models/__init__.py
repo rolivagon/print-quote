@@ -11,6 +11,7 @@ from quote.repo.models.client import Client
 from quote.repo.models.finish import Finish
 from quote.repo.models.finish_pricing import FinishPricing
 from quote.repo.models.fixed_product import FixedProduct, FixedProductQuantityRange
+from quote.repo.models.internal_cost import FinishInternalCost, PaperInternalCost
 from quote.repo.models.paper import Paper
 from quote.repo.models.paper_pricing import PaperPricing
 from quote.repo.models.plotter_pricing import PlotterPricing
@@ -31,6 +32,8 @@ __all__ = [
     "PlotterPricing",
     "Finish",
     "FinishPricing",
+    "PaperInternalCost",
+    "FinishInternalCost",
     "BaseMeasurement",
     # Fixed Products
     "FixedProduct",
