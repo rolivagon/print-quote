@@ -1,8 +1,11 @@
 # Virtual environment
 .venv/
-.env.local
-.env.prod
-.env.*.local
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.env.keys
 *.db
 
 # Python cache
@@ -13,16 +16,28 @@ __pycache__/
 # Testing
 .pytest_cache/
 .coverage
+.coverage.*
+coverage/
 htmlcov/
+
+# Logs and local playwright artifacts
+*.log
+.playwright-mcp/
+.playwright/
 
 # Linting
 .ruff_cache/
+.mypy_cache/
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+
+# Local Supabase CLI state (mirrors supabase/.gitignore at root level)
+supabase/.branches/
+supabase/.temp/
 
 # Local agent plans and file backups
 .opencode/plans/
