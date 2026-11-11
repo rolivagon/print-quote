@@ -40,6 +40,13 @@ npm run build
 - `make dev` starts the API on port 5001 and Vite on port 5173 or the next available port. It clears ports 5001, 5173, and 5174 first.
 - Build the frontend before `make serve`; the API serves `frontend/dist` only when it exists.
 
+## MCP server
+
+- The same application serves an MCP Streamable HTTP endpoint at `/mcp` (stateless, JSON responses, `POST` only). Locally it is `http://localhost:8000/mcp` with `make run`; in production it is `https://<cloud-run-host>/mcp`.
+- Every request needs `Authorization: Bearer <supabase-access-token>` of an active profile; the tools apply that profile's role and client ownership. Example: `claude mcp add --transport http print-quote https://<cloud-run-host>/mcp --header "Authorization: Bearer <token>"`.
+- Supabase access tokens expire (about one hour by default), so the client header must be refreshed; never store a long-lived or service-role credential in the client configuration.
+- Tools: `list_clients`, `list_papers`, `list_finishes`, `preview_quote` (no persistence), and `create_quote` (draft). `tests/test_mcp/` covers the endpoint without a database service.
+
 ## Databases
 
 - Supabase/PostgreSQL is the required runtime database in local development and production.

@@ -13,16 +13,18 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
 from quote.api import auth, clients, finishes, fixed_products, papers, quotes, users
+from quote.mcp import server as mcp_server
 from quote.repo.database import configure_database
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    """Verify PostgreSQL connectivity before accepting requests."""
+    """Verify PostgreSQL connectivity and start the MCP session manager."""
     engine = configure_database()
     with engine.connect():
         pass
-    yield
+    async with mcp_server.mcp_lifespan():
+        yield
 
 
 app = FastAPI(
@@ -101,6 +103,9 @@ app.include_router(papers.router, prefix="/api")
 app.include_router(finishes.router, prefix="/api")
 app.include_router(quotes.router, prefix="/api")
 app.include_router(fixed_products.router, prefix="/api")
+
+# MCP Streamable HTTP endpoint; registered before the SPA fallback so it is not captured.
+app.include_router(mcp_server.router)
 
 
 @app.get("/health")

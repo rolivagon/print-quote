@@ -728,6 +728,48 @@ class QuoteCreateRequest(EnumSchema):
     items: list[QuoteItemCreate] = Field(..., min_length=1, description="Quote items")
 
 
+# Quote preview (calculated, not persisted)
+class QuotePreviewItem(EnumSchema):
+    """Calculated quote item that has not been persisted."""
+
+    name: str = Field(..., description="Item name")
+    description: str | None = Field(None, description="Item description")
+    print_type: PrintType = Field(..., description="Type of printing")
+    color_mode: ColorMode = Field(..., description="Color mode")
+    quantity: int = Field(..., description="Quantity")
+    width_cm: Decimal = Field(..., description="Width in centimeters")
+    height_cm: Decimal = Field(..., description="Height in centimeters")
+    paper: PaperInfo = Field(..., description="Paper or plotter material")
+    finishes: list[FinishInfo] = Field(default_factory=list, description="Finishes with costs")
+    pieces_per_sheet: int | None = Field(None, description="Pieces per sheet")
+    sheets_needed: int | None = Field(None, description="Sheets needed")
+    total_sheets_with_merma: int | None = Field(None, description="Total sheets with waste")
+    square_meters: Decimal | None = Field(None, description="Square meters (plotter)")
+    paper_unit_price: str = Field(..., description="Paper unit price in CLP format")
+    material_cost: str = Field(..., description="Material cost in CLP format")
+    finishing_cost: str = Field(..., description="Finishing cost in CLP format")
+    plates_cost: str = Field(..., description="Plates cost in CLP format (offset)")
+    run_cost: str = Field(..., description="Run cost in CLP format (offset)")
+    fixed_costs: str = Field(..., description="Fixed costs in CLP format")
+    paper_cost: str = Field(..., description="Paper cost in CLP format")
+    loss_percentage: float = Field(..., description="Loss percentage applied")
+    subtotal_before_losses: str = Field(..., description="Subtotal before losses in CLP format")
+    subtotal_with_losses: str = Field(..., description="Subtotal after losses in CLP format")
+    net_before_iva: str = Field(..., description="Net amount before IVA in CLP format")
+    iva_amount: str = Field(..., description="IVA amount in CLP format")
+    total_final: str = Field(..., description="Final total in CLP format")
+    internal_cost_breakdown: InternalCostBreakdown | None = None
+
+
+class QuotePreviewResponse(BaseModel):
+    """Quote totals and items calculated exactly as quote creation would persist them."""
+
+    subtotal: str = Field(..., description="Subtotal amount in CLP format")
+    tax: str = Field(..., description="Tax amount in CLP format")
+    total: str = Field(..., description="Total amount in CLP format")
+    items: list[QuotePreviewItem] = Field(..., description="Calculated items")
+
+
 # Quote item response with calculation details
 class QuoteItemResponse(EnumSchema):
     """Quote item response with full calculation details."""

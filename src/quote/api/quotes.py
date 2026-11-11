@@ -16,6 +16,7 @@ from quote.api.schemas import (
     DimensionsInfo,
     DirectCosts,
     FinalTotals,
+    FinishInfo,
     InternalCostBreakdown,
     IvaInfo,
     LossesInfo,
@@ -30,7 +31,10 @@ from quote.api.schemas import (
     ProductionCalculation,
     QuoteCreateRequest,
     QuoteFinishItem,
+    QuoteItemCreate,
     QuoteItemResponse,
+    QuotePreviewItem,
+    QuotePreviewResponse,
     QuoteResponse,
     QuoteStatusUpdate,
     Specifications,
@@ -52,7 +56,14 @@ router = APIRouter(prefix="/quotes", tags=["quotes"])
 def _internal_breakdown_response(item, is_admin: bool) -> InternalCostBreakdown | None:
     if not is_admin or item.internal_cost_snapshot is None:
         return None
-    snapshot = item.internal_cost_snapshot
+    return _internal_breakdown_from_snapshot(
+        item.internal_cost_snapshot, item.plates_cost, item.run_cost, item.fixed_costs
+    )
+
+
+def _internal_breakdown_from_snapshot(
+    snapshot: dict, plates_cost: Decimal, run_cost: Decimal, fixed_costs: Decimal
+) -> InternalCostBreakdown:
     results = snapshot.get("results", {})
     legacy = {
         "paper": snapshot.get("paper"),
@@ -76,9 +87,9 @@ def _internal_breakdown_response(item, is_admin: bool) -> InternalCostBreakdown 
         total=format_snapshot_value(legacy["total"]) or "$0",
         notices=snapshot.get("notices", []),
         offset_specific=OffsetSpecificCosts(
-            plates=format_clp(item.plates_cost),
-            printing_run=format_clp(item.run_cost),
-            fixed_costs=format_clp(item.fixed_costs),
+            plates=format_clp(plates_cost),
+            printing_run=format_clp(run_cost),
+            fixed_costs=format_clp(fixed_costs),
         ),
     )
 
@@ -551,49 +562,37 @@ def _calculate_offset_quote(
     )
 
 
-@router.post(
-    "/",
-    response_model=QuoteResponse,
-    response_model_exclude_none=True,
-    status_code=status.HTTP_201_CREATED,
-)
-def create_quote(
-    db: Annotated[Session, Depends(get_db)],
-    request: QuoteCreateRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
-):
-    """Create and save a new quote with automatic calculation.
-
-    The backend automatically calculates for each item:
-    - pieces_per_sheet, sheets_needed
-    - material_cost, finishing_cost
-    - markup (by print type), IVA (19%), total_final
-
-    The quote is created with DRAFT status.
-    """
+def _get_quotable_client(db: Session, client_id: int, current_user: User):
+    """Return the client when the profile may quote it; raise 404/403 otherwise."""
     from quote.repo.sql_repo import SQLClientRepository
 
     # Sellers can only quote their own clients; administrators retain global access.
     client_repo = SQLClientRepository(db)
-    client = client_repo.get_by_id(request.client_id)
+    client = client_repo.get_by_id(client_id)
     if not client:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Client with ID {request.client_id} not found",
+            detail=f"Client with ID {client_id} not found",
         )
     if current_user.role not in {UserRole.ADMIN, UserRole.SUPER_ADMIN}:
         if client.created_by_id != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Client access denied"
             )
+    return client
 
+
+def _calculate_quote_items(
+    db: Session, items: list[QuoteItemCreate]
+) -> tuple[list[dict], Decimal, Decimal, Decimal]:
+    """Price every item and return the item data with the quote subtotal, tax, and total."""
     # Process items and calculate
     quote_items = []
     total_subtotal = Decimal("0")
     total_tax = Decimal("0")
     total_final = Decimal("0")
 
-    for item_data in request.items:
+    for item_data in items:
         # Build calculation data based on print type
         if item_data.print_type == PrintType.DIGITAL:
             calc_data = DigitalQuoteCalculate(
@@ -829,6 +828,86 @@ def create_quote(
         total_subtotal += breakdown.net_before_iva
         total_tax += breakdown.iva_amount
         total_final += breakdown.total_final
+
+    return quote_items, total_subtotal, total_tax, total_final
+
+
+def build_quote_preview(
+    db: Session, items: list[QuoteItemCreate], current_user: User
+) -> QuotePreviewResponse:
+    """Calculate items exactly as quote creation does, without persisting anything."""
+    quote_items, total_subtotal, total_tax, total_final = _calculate_quote_items(db, items)
+    is_admin = is_admin_role(current_user.role)
+    return QuotePreviewResponse(
+        subtotal=format_clp(total_subtotal),
+        tax=format_clp(total_tax),
+        total=format_clp(total_final),
+        items=[
+            QuotePreviewItem(
+                name=item["name"],
+                description=item["description"],
+                print_type=item["print_type"],
+                color_mode=item["color_mode"],
+                quantity=item["quantity"],
+                width_cm=item["width"],
+                height_cm=item["height"],
+                paper=PaperInfo(id=item["paper_id"], name=item["paper_name"]),
+                finishes=[FinishInfo(**finish) for finish in item["finishes_info"]],
+                pieces_per_sheet=item["pieces_per_sheet"],
+                sheets_needed=item["sheets_needed"],
+                total_sheets_with_merma=item["total_sheets_with_merma"],
+                square_meters=item["square_meters"],
+                paper_unit_price=format_clp(item["paper_unit_price"]),
+                material_cost=format_clp(item["material_cost"]),
+                finishing_cost=format_clp(item["finishing_cost"]),
+                plates_cost=format_clp(item["plates_cost"]),
+                run_cost=format_clp(item["run_cost"]),
+                fixed_costs=format_clp(item["fixed_costs"]),
+                paper_cost=format_clp(item["paper_cost"]),
+                loss_percentage=item["loss_percentage"],
+                subtotal_before_losses=format_clp(item["subtotal_before_losses"]),
+                subtotal_with_losses=format_clp(item["subtotal_with_losses"]),
+                net_before_iva=format_clp(item["total_final"] - item["iva_amount"]),
+                iva_amount=format_clp(item["iva_amount"]),
+                total_final=format_clp(item["total_final"]),
+                internal_cost_breakdown=(
+                    _internal_breakdown_from_snapshot(
+                        item["internal_costs"].snapshot(),
+                        item["plates_cost"],
+                        item["run_cost"],
+                        item["fixed_costs"],
+                    )
+                    if is_admin
+                    else None
+                ),
+            )
+            for item in quote_items
+        ],
+    )
+
+
+@router.post(
+    "/",
+    response_model=QuoteResponse,
+    response_model_exclude_none=True,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_quote(
+    db: Annotated[Session, Depends(get_db)],
+    request: QuoteCreateRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    """Create and save a new quote with automatic calculation.
+
+    The backend automatically calculates for each item:
+    - pieces_per_sheet, sheets_needed
+    - material_cost, finishing_cost
+    - markup (by print type), IVA (19%), total_final
+
+    The quote is created with DRAFT status.
+    """
+    client = _get_quotable_client(db, request.client_id, current_user)
+    quote_items, total_subtotal, total_tax, total_final = _calculate_quote_items(db, request.items)
 
     # Create quote
     quote_repo = SQLQuoteRepository(db)

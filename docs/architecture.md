@@ -13,6 +13,7 @@
 - `repo/` contains repository abstractions and SQL persistence. Persistent SQLModel entities belong in `repo/models/`.
 - `service/` coordinates use cases and domain behavior.
 - `api/` composes services, pricing strategies, and SQL repositories; it must not contain pricing rules.
+- `mcp/` is an adapter that exposes the quote creation flow as MCP tools at `/mcp` inside the FastAPI application. It authenticates through the API's `get_current_user` dependency and calls the same router functions and quote calculation used by `POST /api/quotes/`; it must not contain pricing rules or its own authorization logic.
 
 ## Persistence
 

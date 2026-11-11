@@ -215,6 +215,40 @@ class TestSQLFinishRepositoryPlotterCatalog:
 
         assert [finish.name for finish in result] == ["Ojetillos"]
 
+    def test_get_finishes_by_print_type_returns_only_priced_active_finishes(
+        self, db_session: Session
+    ):
+        """Should list active finishes with selling-price pricing for the print type."""
+        repo = SQLFinishRepository(db_session)
+        digital = Finish(name="Corte Digital", is_active=True)
+        offset = Finish(name="Barniz Offset", is_active=True)
+        inactive = Finish(name="Inactive Digital", is_active=False)
+        db_session.add_all([digital, offset, inactive])
+        db_session.flush()
+        db_session.add_all(
+            [
+                FinishPricing(
+                    finish_id=finish.id,
+                    print_type=print_type,
+                    unit=Unit.JOB,
+                    min_quantity=min_quantity,
+                    max_quantity=None,
+                    unit_price=Decimal("1000"),
+                )
+                for finish, print_type, min_quantity in [
+                    (digital, PrintType.DIGITAL, 1),
+                    (digital, PrintType.DIGITAL, 101),
+                    (offset, PrintType.OFFSET, 1),
+                    (inactive, PrintType.DIGITAL, 1),
+                ]
+            ]
+        )
+        db_session.commit()
+
+        result = repo.get_finishes_by_print_type(PrintType.DIGITAL)
+
+        assert [finish.name for finish in result] == ["Corte Digital"]
+
 
 class TestSQLMasterRepositoryFinishPricing:
     """TDD tests for finish pricing queries."""

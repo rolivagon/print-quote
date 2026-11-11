@@ -1160,6 +1160,21 @@ class SQLFinishRepository(FinishRepository):
         )
         return list(self._session.execute(statement).scalars().all())
 
+    def get_finishes_by_print_type(self, print_type: PrintType) -> list[Finish]:
+        """Return active finishes that have selling-price pricing for a Digital/Offset type."""
+        from quote.repo.models import FinishPricing
+
+        statement = (
+            select(Finish)
+            .join(FinishPricing, FinishPricing.finish_id == Finish.id)
+            .where(FinishPricing.print_type == print_type)
+            .where(Finish.deleted_at.is_(None))
+            .where(Finish.is_active.is_(True))
+            .distinct()
+            .order_by(Finish.name)
+        )
+        return list(self._session.execute(statement).scalars().all())
+
     def update(
         self,
         finish_id: int,
