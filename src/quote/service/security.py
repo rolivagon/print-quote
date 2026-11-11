@@ -32,6 +32,11 @@ def _get_jwks(refresh: bool = False) -> dict[str, Any]:
     return _jwks()
 
 
+def supabase_auth_issuer() -> str:
+    """Return the Supabase Auth issuer, which is also its OAuth authorization server."""
+    return f"{_supabase_url()}/auth/v1"
+
+
 def validate_supabase_access_token(token: str) -> dict[str, Any]:
     """Validate signature, issuer, audience, expiry, and UUID subject of a Supabase JWT."""
     try:
@@ -50,7 +55,7 @@ def validate_supabase_access_token(token: str) -> dict[str, Any]:
             jwks,
             algorithms=[algorithm],
             audience="authenticated",
-            issuer=f"{_supabase_url()}/auth/v1",
+            issuer=supabase_auth_issuer(),
         )
     except (JWTError, OSError, ValueError, json.JSONDecodeError) as exc:
         raise InvalidAccessToken("Invalid Supabase access token") from exc

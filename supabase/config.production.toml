@@ -2,3 +2,11 @@
 # project as part of deployment; local/test deliberately use config.toml.
 [auth.email]
 enable_confirmations = true
+
+# MCP OAuth: Authentication > OAuth Server in the dashboard. The consent page URL is the
+# Site URL plus this path, so Authentication > URL Configuration > Site URL must be the
+# Cloud Run service URL.
+[auth.oauth_server]
+enabled = true
+authorization_url_path = "/oauth/consent"
+allow_dynamic_registration = true

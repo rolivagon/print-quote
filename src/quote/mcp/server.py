@@ -6,6 +6,7 @@ from contextvars import ContextVar
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.routing import APIRoute
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
@@ -21,6 +22,7 @@ from quote.mcp.items import QuoteItemInput, normalize_item
 from quote.repo.models import Paper as PaperModel
 from quote.repo.models import User
 from quote.repo.sql_repo import SQLFinishRepository
+from quote.service.security import supabase_auth_issuer
 
 INSTRUCTIONS = """Cotizador de imprenta (digital, offset y plotter).
 
@@ -173,7 +175,50 @@ class _MCPResponse(Response):
         await mcp.session_manager.handle_request(scope, receive, send)
 
 
-router = APIRouter()
+METADATA_PATH = "/.well-known/oauth-protected-resource"
+
+
+def _public_base_url(request: Request) -> str:
+    """Return the public origin; Cloud Run terminates TLS and forwards the original scheme."""
+    scheme = request.headers.get("x-forwarded-proto", request.url.scheme).split(",")[0].strip()
+    return f"{scheme}://{request.url.netloc}"
+
+
+class _MCPRoute(APIRoute):
+    """Point MCP clients to the OAuth metadata when authentication fails."""
+
+    def get_route_handler(self) -> Callable:
+        handler = super().get_route_handler()
+
+        async def route_handler(request: Request) -> Response:
+            try:
+                return await handler(request)
+            except HTTPException as exc:
+                if exc.status_code != 401:
+                    raise
+                metadata_url = f"{_public_base_url(request)}{METADATA_PATH}/mcp"
+                raise HTTPException(
+                    status_code=401,
+                    detail=exc.detail,
+                    headers={"WWW-Authenticate": f'Bearer resource_metadata="{metadata_url}"'},
+                ) from exc
+
+        return route_handler
+
+
+router = APIRouter(route_class=_MCPRoute)
+
+
+@router.get(f"{METADATA_PATH}/mcp", include_in_schema=False)
+@router.get(METADATA_PATH, include_in_schema=False)
+def protected_resource_metadata(request: Request) -> dict:
+    """Describe /mcp as a resource protected by the Supabase OAuth server (RFC 9728)."""
+    return {
+        "resource": f"{_public_base_url(request)}/mcp",
+        "authorization_servers": [supabase_auth_issuer()],
+        "bearer_methods_supported": ["header"],
+        "resource_name": "Print Quote",
+    }
 
 
 @router.api_route(

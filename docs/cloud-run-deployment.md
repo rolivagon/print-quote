@@ -117,6 +117,16 @@ curl --fail --silent --show-error "$SERVICE_URL/health"
 
 Then manually verify sign-in, an authenticated `/api` request, role restrictions, and a quote workflow. Review Cloud Run logs and Supabase Auth logs without exposing credentials.
 
+## MCP OAuth
+
+MCP clients (ChatGPT, claude.ai, Claude Code) sign in through the Supabase OAuth 2.1 server, a beta Supabase Auth feature. Apply the `[auth.oauth_server]` contract in `supabase/config.production.toml` once in the production project:
+
+1. Authentication > URL Configuration: set Site URL to the Cloud Run service URL, because the consent page is the Site URL plus the authorization path.
+2. Authentication > OAuth Server: enable the OAuth 2.1 server, set the Authorization Path to `/oauth/consent`, and enable dynamic client registration.
+3. Verify discovery: `curl "$SERVICE_URL/.well-known/oauth-protected-resource/mcp"` must list `https://<project-ref>.supabase.co/auth/v1`, and `curl "https://<project-ref>.supabase.co/.well-known/oauth-authorization-server/auth/v1"` must return the authorization server metadata.
+
+The application does not store OAuth clients or tokens; registered clients are listed and removed in Authentication > OAuth Apps.
+
 ## Rollback
 
 List revisions and route all traffic to the last known-good revision:

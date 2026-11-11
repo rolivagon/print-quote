@@ -113,9 +113,10 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import FullScreenLayout from '@/components/layout/FullScreenLayout.vue'
 import { useAuth } from '@/composables/useAuth'
+import { safeReturnPath } from '@/router/returnPath'
 
 const email = ref('')
 const password = ref('')
@@ -123,6 +124,7 @@ const showPassword = ref(false)
 const error = ref('')
 const isLoading = ref(false)
 
+const route = useRoute()
 const router = useRouter()
 const { login } = useAuth()
 
@@ -138,7 +140,7 @@ const handleSubmit = async () => {
     const success = await login(email.value, password.value)
 
     if (success) {
-      router.push('/')
+      router.push(safeReturnPath(route.query.redirect))
     } else {
       error.value = 'Correo o contraseña inválidos'
     }

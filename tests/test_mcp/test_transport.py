@@ -25,7 +25,7 @@ def test_mcp_without_bearer_token_is_rejected(raw_mcp_request):
     response = raw_mcp_request(token=None)
 
     assert response.status_code == 401
-    assert response.headers["www-authenticate"] == "Bearer"
+    assert response.headers["www-authenticate"].startswith("Bearer resource_metadata=")
 
 
 def test_mcp_with_invalid_token_is_rejected(raw_mcp_request, monkeypatch):
@@ -41,7 +41,7 @@ def test_mcp_with_invalid_token_is_rejected(raw_mcp_request, monkeypatch):
     response = raw_mcp_request(token="not-a-jwt")
 
     assert response.status_code == 401
-    assert response.headers["www-authenticate"] == "Bearer"
+    assert response.headers["www-authenticate"].startswith("Bearer resource_metadata=")
 
 
 def test_mcp_lists_quote_tools_for_authenticated_user(run_mcp, seller):

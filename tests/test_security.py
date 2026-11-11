@@ -30,13 +30,14 @@ def supabase_token(monkeypatch):
     monkeypatch.setenv("SUPABASE_URL", url)
     monkeypatch.setattr("quote.service.security._jwks", lambda: {"keys": [public_jwk]})
 
-    def create(expires_in: int = 300) -> str:
+    def create(expires_in: int = 300, **extra_claims) -> str:
         return jwt.encode(
             {
                 "sub": str(uuid4()),
                 "aud": "authenticated",
                 "iss": f"{url}/auth/v1",
                 "exp": datetime.now(UTC) + timedelta(seconds=expires_in),
+                **extra_claims,
             },
             private_pem,
             algorithm="RS256",
@@ -50,6 +51,14 @@ def supabase_token(monkeypatch):
 def test_valid_asymmetric_supabase_token_returns_claims(supabase_token):
     """Only an issuer-signed Supabase token with the required audience is accepted."""
     assert validate_supabase_access_token(supabase_token())["aud"] == "authenticated"
+
+
+def test_oauth_server_token_with_client_id_returns_claims(supabase_token):
+    """Tokens issued by the Supabase OAuth server to an MCP client validate like sessions."""
+    claims = validate_supabase_access_token(supabase_token(client_id=str(uuid4())))
+
+    assert claims["aud"] == "authenticated"
+    assert "client_id" in claims
 
 
 def test_es256_supabase_token_returns_claims(monkeypatch):

@@ -42,9 +42,11 @@ npm run build
 
 ## MCP server
 
-- The same application serves an MCP Streamable HTTP endpoint at `/mcp` (stateless, JSON responses, `POST` only). Locally it is `http://localhost:8000/mcp` with `make run`; in production it is `https://<cloud-run-host>/mcp`.
-- Every request needs `Authorization: Bearer <supabase-access-token>` of an active profile; the tools apply that profile's role and client ownership. Example: `claude mcp add --transport http print-quote https://<cloud-run-host>/mcp --header "Authorization: Bearer <token>"`.
-- Supabase access tokens expire (about one hour by default), so the client header must be refreshed; never store a long-lived or service-role credential in the client configuration.
+- The same application serves an MCP Streamable HTTP endpoint at `/mcp` (stateless, JSON responses, `POST` only). Locally it is `http://localhost:8000/mcp` with `make run` (or port 5001 with `make dev`); in production it is `https://<cloud-run-host>/mcp`.
+- Clients authenticate with OAuth: an unauthenticated request returns 401 with `WWW-Authenticate: Bearer resource_metadata=".../.well-known/oauth-protected-resource/mcp"`, which names Supabase Auth (`<SUPABASE_URL>/auth/v1`) as the authorization server. The client registers itself, opens the SPA page `/oauth/consent`, and receives an access and refresh token for the signed-in user. An existing browser session is reused, and a client the user already approved completes without the consent screen.
+- Connect with only the URL: ChatGPT (connector with OAuth authentication), claude.ai (custom connector), or `claude mcp add --transport http print-quote https://<cloud-run-host>/mcp`.
+- Locally, `supabase/config.toml` enables `[auth.oauth_server]` with dynamic registration; restart the stack (`supabase stop && supabase start`) after changing it. The consent page is resolved from `site_url`, so run the frontend with `make dev` at `http://127.0.0.1:5173`.
+- A manually copied Supabase access token in `Authorization: Bearer <token>` still works as a fallback (it expires in about one hour); never store a long-lived or service-role credential in a client configuration.
 - Tools: `list_clients`, `list_papers`, `list_finishes`, `preview_quote` (no persistence), and `create_quote` (draft). `tests/test_mcp/` covers the endpoint without a database service.
 
 ## Databases

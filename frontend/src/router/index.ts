@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { safeReturnPath } from '@/router/returnPath'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -136,6 +137,15 @@ const router = createRouter({
       },
     },
     {
+      path: '/oauth/consent',
+      name: 'OAuthConsent',
+      component: () => import('../views/OAuth/OAuthConsentView.vue'),
+      meta: {
+        title: 'Autorizar acceso',
+        requiresAuth: true,
+      },
+    },
+    {
       path: '/signup',
       name: 'Signup',
       component: () => import('../views/Auth/Signup.vue'),
@@ -231,12 +241,12 @@ router.beforeEach(async (to, from, next) => {
   document.title = to.meta.title ? `${to.meta.title} | AemePrint` : 'AemePrint'
 
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-    next('/login')
+    next({ path: '/login', query: { redirect: to.fullPath } })
     return
   }
 
   if (to.meta.requiresGuest && authStore.isAuthenticated) {
-    next('/')
+    next(safeReturnPath(to.query.redirect))
     return
   }
 
