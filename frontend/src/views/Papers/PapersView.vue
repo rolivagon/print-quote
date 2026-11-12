@@ -392,7 +392,7 @@
           <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
             ¿Estás seguro de que deseas eliminar <strong>{{ paperToDelete?.name }}</strong
             >? Esta acción no se puede deshacer y también eliminará todos los rangos de precios
-            asociados.
+            asociados. Las cotizaciones existentes no se verán afectadas.
           </p>
           <div class="mt-6 flex justify-end gap-3">
             <button
@@ -659,7 +659,7 @@ const deletePaper = async () => {
 
   deleting.value = true
   try {
-    await del(`/papers/${paperToDelete.value.id}/`)
+    await del(`/papers/${paperToDelete.value.id}`)
     showDeleteModal.value = false
     paperToDelete.value = null
     successMessage.value = '¡Papel eliminado exitosamente!'

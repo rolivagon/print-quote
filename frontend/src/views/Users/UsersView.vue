@@ -758,7 +758,7 @@ const deleteUser = async () => {
 
   deleting.value = true
   try {
-    await del(`/users/${userToDelete.value.id}/`)
+    await del(`/users/${userToDelete.value.id}`)
     showDeleteModal.value = false
     userToDelete.value = null
     successMessage.value = '¡Usuario eliminado exitosamente!'

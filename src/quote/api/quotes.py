@@ -582,6 +582,27 @@ def _get_quotable_client(db: Session, client_id: int, current_user: User):
     return client
 
 
+def _ensure_catalog_available(db: Session, item_data: QuoteItemCreate) -> None:
+    """Reject soft-deleted or inactive papers and finishes; existing quotes keep their snapshot."""
+    from quote.repo.sql_repo import SQLFinishRepository, SQLPaperRepository
+
+    if item_data.paper_id is not None:
+        paper = SQLPaperRepository(db).get_by_id(item_data.paper_id)
+        if paper is None or not paper.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Paper ID {item_data.paper_id} is not available",
+            )
+    finish_repo = SQLFinishRepository(db)
+    for finish_id in item_data.finishes:
+        finish = finish_repo.get_by_id(finish_id)
+        if finish is None or not finish.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Finish ID {finish_id} is not available",
+            )
+
+
 def _calculate_quote_items(
     db: Session, items: list[QuoteItemCreate]
 ) -> tuple[list[dict], Decimal, Decimal, Decimal]:
@@ -593,6 +614,8 @@ def _calculate_quote_items(
     total_final = Decimal("0")
 
     for item_data in items:
+        _ensure_catalog_available(db, item_data)
+
         # Build calculation data based on print type
         if item_data.print_type == PrintType.DIGITAL:
             calc_data = DigitalQuoteCalculate(

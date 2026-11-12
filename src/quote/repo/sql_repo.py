@@ -5,7 +5,7 @@ from decimal import Decimal
 from unicodedata import combining, normalize
 from uuid import UUID
 
-from sqlalchemy import or_, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
 from quote.domain.enums import ClientType, ColorMode, FinishType, PrintType, Unit, UserRole
@@ -119,6 +119,8 @@ class SQLMasterRepository:
         papers = self._session.execute(
             select(Paper)
             .join(PlotterPricing, PlotterPricing.paper_id == Paper.id)
+            .where(Paper.deleted_at.is_(None))
+            .where(Paper.is_active.is_(True))
             .distinct()
             .order_by(Paper.id)
         ).scalars()
@@ -785,7 +787,9 @@ class SQLPaperRepository(PaperRepository):
         return paper
 
     def soft_delete(self, paper_id: int) -> bool:
-        """Soft delete a paper by setting deleted_at timestamp.
+        """Soft delete a paper and hard delete its price ranges.
+
+        Quotes keep their own prices and snapshots, so no quote depends on the ranges.
 
         Args:
             paper_id: Paper's primary key
@@ -799,6 +803,8 @@ class SQLPaperRepository(PaperRepository):
 
         paper.deleted_at = datetime.utcnow()
         paper.is_active = False
+        self._session.execute(delete(PaperPricing).where(PaperPricing.paper_id == paper_id))
+        self._session.execute(delete(PlotterPricing).where(PlotterPricing.paper_id == paper_id))
         self._session.commit()
         return True
 
@@ -1230,7 +1236,9 @@ class SQLFinishRepository(FinishRepository):
         return finish
 
     def soft_delete(self, finish_id: int) -> bool:
-        """Soft delete a finish by setting deleted_at timestamp.
+        """Soft delete a finish and hard delete its price ranges.
+
+        Quotes keep their own prices and snapshots, so no quote depends on the ranges.
 
         Args:
             finish_id: Finish's primary key
@@ -1244,6 +1252,8 @@ class SQLFinishRepository(FinishRepository):
 
         finish.deleted_at = datetime.utcnow()
         finish.is_active = False
+        self._session.execute(delete(FinishPricing).where(FinishPricing.finish_id == finish_id))
+        self._session.execute(delete(PlotterPricing).where(PlotterPricing.finish_id == finish_id))
         self._session.commit()
         return True
 

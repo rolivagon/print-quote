@@ -71,7 +71,7 @@
             </button>
             <button
               v-if="editingRangeId !== range.id"
-              @click="deleteRange(range)"
+              @click="rangeToDelete = range"
               :disabled="deletingId === range.id"
               class="inline-flex items-center gap-1 rounded-lg p-2 text-error-500 hover:bg-error-50 hover:text-error-600 dark:hover:bg-error-500/10"
               title="Eliminar rango"
@@ -370,12 +370,25 @@
     >
       {{ message }}
     </div>
+
+    <ConfirmDeleteModal
+      :open="rangeToDelete !== null"
+      title="Eliminar Rango"
+      :loading="deletingId !== null"
+      @confirm="deleteRange"
+      @cancel="rangeToDelete = null"
+    >
+      ¿Estás seguro de que deseas eliminar el rango
+      <strong>{{ rangeToDelete?.min_quantity }} – {{ rangeToDelete?.max_quantity ?? '∞' }}</strong
+      >? Esta acción no se puede deshacer.
+    </ConfirmDeleteModal>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useApi } from '@/composables/useApi'
+import ConfirmDeleteModal from '@/components/common/ConfirmDeleteModal.vue'
 import type { PrintType, PricingRange, Unit } from '@/types'
 import {
   UNIT_OPTIONS,
@@ -408,6 +421,7 @@ const currentRange = ref<PricingRange | null>(null)
 const showNewRangeForm = ref(false)
 const saving = ref(false)
 const deletingId = ref<number | null>(null)
+const rangeToDelete = ref<PricingRange | null>(null)
 const editingRangeId = ref<number | null>(null)
 const editingPrice = ref('')
 const updatingId = ref<number | null>(null)
@@ -696,8 +710,9 @@ const saveNewRange = async () => {
   }
 }
 
-const deleteRange = async (range: PricingRange) => {
-  if (!range.id) return
+const deleteRange = async () => {
+  const range = rangeToDelete.value
+  if (!range?.id) return
 
   deletingId.value = range.id
 
@@ -714,6 +729,7 @@ const deleteRange = async (range: PricingRange) => {
     console.error('Error deleting range:', err)
   } finally {
     deletingId.value = null
+    rangeToDelete.value = null
   }
 }
 

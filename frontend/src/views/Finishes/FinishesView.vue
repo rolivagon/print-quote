@@ -359,7 +359,7 @@
           <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
             ¿Estás seguro de que deseas eliminar <strong>{{ finishToDelete?.name }}</strong
             >? Esta acción no se puede deshacer y también eliminará todos los rangos de precios
-            asociados.
+            asociados. Las cotizaciones existentes no se verán afectadas.
           </p>
           <div class="mt-6 flex justify-end gap-3">
             <button
@@ -610,7 +610,7 @@ const deleteFinish = async () => {
 
   deleting.value = true
   try {
-    await del(`/finishes/${finishToDelete.value.id}/`)
+    await del(`/finishes/${finishToDelete.value.id}`)
     showDeleteModal.value = false
     finishToDelete.value = null
     successMessage.value = '¡Acabado eliminado exitosamente!'

@@ -152,7 +152,7 @@
                       </svg>
                     </button>
                     <button
-                      @click="deleteProduct(product)"
+                      @click="productToDelete = product"
                       :disabled="deletingId === product.id"
                       class="inline-flex items-center gap-1 rounded-lg p-2 text-error-500 hover:bg-error-50 hover:text-error-600 dark:hover:bg-error-500/10"
                       title="Eliminar producto"
@@ -267,6 +267,17 @@
         </div>
       </div>
     </Modal>
+
+    <ConfirmDeleteModal
+      :open="productToDelete !== null"
+      title="Eliminar Producto"
+      :loading="deletingId !== null"
+      @confirm="deleteProduct"
+      @cancel="productToDelete = null"
+    >
+      ¿Estás seguro de que deseas eliminar <strong>{{ productToDelete?.name }}</strong
+      >? Esta acción no se puede deshacer y también eliminará sus rangos de precios.
+    </ConfirmDeleteModal>
   </AdminLayout>
 </template>
 
@@ -274,6 +285,7 @@
 import { ref, computed, onMounted } from 'vue'
 import AdminLayout from '@/components/layout/AdminLayout.vue'
 import Modal from '@/components/ui/Modal.vue'
+import ConfirmDeleteModal from '@/components/common/ConfirmDeleteModal.vue'
 import FixedProductRanges from '@/components/fixed-products/FixedProductRanges.vue'
 import { useApi } from '@/composables/useApi'
 
@@ -304,6 +316,7 @@ const { get, del } = useApi()
 const products = ref<FixedProduct[]>([])
 const loading = ref(false)
 const deletingId = ref<string | null>(null)
+const productToDelete = ref<FixedProduct | null>(null)
 const searchQuery = ref('')
 const printTypeFilter = ref('')
 const successMessage = ref('')
@@ -354,10 +367,9 @@ const viewProduct = (product: FixedProduct) => {
   showDetailModal.value = true
 }
 
-const deleteProduct = async (product: FixedProduct) => {
-  if (!confirm(`¿Estás seguro de eliminar el producto "${product.name}"?`)) {
-    return
-  }
+const deleteProduct = async () => {
+  const product = productToDelete.value
+  if (!product) return
 
   deletingId.value = product.id
   try {
@@ -369,6 +381,7 @@ const deleteProduct = async (product: FixedProduct) => {
     console.error('Error deleting product:', error)
   } finally {
     deletingId.value = null
+    productToDelete.value = null
   }
 }
 

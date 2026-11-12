@@ -953,7 +953,7 @@ const saveClient = async () => {
         updateData.address = submitData.address?.trim() || undefined
       }
 
-      await patch(`/clients/${editingClient.value.id}/`, updateData)
+      await patch(`/clients/${editingClient.value.id}`, updateData)
       successMessage.value = '¡Cliente actualizado exitosamente!'
       await loadClients()
       goToList()
@@ -981,7 +981,7 @@ const deleteClient = async () => {
 
   deleting.value = true
   try {
-    await del(`/clients/${clientToDelete.value.id}/`)
+    await del(`/clients/${clientToDelete.value.id}`)
     showDeleteModal.value = false
     clientToDelete.value = null
     successMessage.value = '¡Cliente eliminado exitosamente!'
